@@ -369,7 +369,7 @@ internal fun ExpressiveArtworkCardPage(
                     // Fully qualified: the outer Column's ColumnScope.AnimatedVisibility member
                     // otherwise shadows the top-level overload (same workaround as Classic).
                     androidx.compose.animation.AnimatedVisibility(
-                        visible = state.screenData.isVideo && state.shouldShowVideo,
+                        visible = false, // Video playback is disabled in this audio-only build.
                         modifier = Modifier.align(Alignment.Center),
                     ) {
                         var internalShowSubtitle by rememberSaveable {
