@@ -124,12 +124,15 @@ class SpotifyLibrarySyncService(
                         cachedPlaylistIds.forEach { playlistId ->
                             dataStoreManager.putString("$KEY_PLAYLIST_CACHE_PREFIX$playlistId", "")
                             dataStoreManager.putString("$KEY_PLAYLIST_TIME_PREFIX$playlistId", "0")
+                            dataStoreManager.putString("$KEY_PLAYLIST_ATTEMPT_PREFIX$playlistId", "0")
                         }
                         dataStoreManager.putString(KEY_PLAYLIST_CACHE_IDS, "")
                         dataStoreManager.putString(KEY_LIBRARY_CACHE, "")
                         dataStoreManager.putString(KEY_HOME_CACHE, "")
                         dataStoreManager.putString(KEY_LIBRARY_SYNC_TIME, "0")
                         dataStoreManager.putString(KEY_HOME_SYNC_TIME, "0")
+                        dataStoreManager.putString(KEY_LIBRARY_ATTEMPT_TIME, "0")
+                        dataStoreManager.putString(KEY_HOME_ATTEMPT_TIME, "0")
                         dataStoreManager.setSpotifyPersonalToken("")
                         dataStoreManager.setSpotifyPersonalTokenExpires(0L)
                     }
@@ -296,16 +299,18 @@ class SpotifyLibrarySyncService(
     }
 
     suspend fun syncLibrary(
-        dataSaverEnabled: Boolean = false,
+        dataSaverEnabled: Boolean = true,
         forceRefresh: Boolean = false,
     ): Result<String> = libraryMutex.withLock {
         runCatching {
         val now = Clock.System.now().toEpochMilliseconds()
         val last = dataStoreManager.getString(KEY_LIBRARY_SYNC_TIME).first()?.toLongOrNull()
-        if (!SpotifySyncPolicy.shouldRefresh(last, now, SpotifySyncPolicy.DEFAULT_LIBRARY_REFRESH_INTERVAL_MS, dataSaverEnabled, forceRefresh)) {
+        val lastAttempt = dataStoreManager.getString(KEY_LIBRARY_ATTEMPT_TIME).first()?.toLongOrNull()
+        if (!SpotifySyncPolicy.shouldRefresh(last, now, SpotifySyncPolicy.DEFAULT_LIBRARY_REFRESH_INTERVAL_MS, dataSaverEnabled, forceRefresh, lastAttempt)) {
             return@runCatching cachedLibraryJson() ?: error("No cached Spotify library yet; perform a manual refresh.")
         }
 
+        dataStoreManager.putString(KEY_LIBRARY_ATTEMPT_TIME, now.toString())
         val token = accessToken()
         val playlists = fetchAllPages(token, "libraryV3", ::playlistVariables, "data", "me", "libraryV3")
         val likedTracks = fetchAllPages(token, "fetchLibraryTracks", ::pageVariables, "data", "me", "library", "tracks")
@@ -322,15 +327,17 @@ class SpotifyLibrarySyncService(
     }
 
     suspend fun syncHome(
-        dataSaverEnabled: Boolean = false,
+        dataSaverEnabled: Boolean = true,
         forceRefresh: Boolean = false,
     ): Result<String> = homeMutex.withLock {
         runCatching {
         val now = Clock.System.now().toEpochMilliseconds()
         val last = dataStoreManager.getString(KEY_HOME_SYNC_TIME).first()?.toLongOrNull()
-        if (!SpotifySyncPolicy.shouldRefresh(last, now, SpotifySyncPolicy.DEFAULT_HOME_REFRESH_INTERVAL_MS, dataSaverEnabled, forceRefresh)) {
+        val lastAttempt = dataStoreManager.getString(KEY_HOME_ATTEMPT_TIME).first()?.toLongOrNull()
+        if (!SpotifySyncPolicy.shouldRefresh(last, now, SpotifySyncPolicy.DEFAULT_HOME_REFRESH_INTERVAL_MS, dataSaverEnabled, forceRefresh, lastAttempt)) {
             return@runCatching cachedHomeJson() ?: error("No cached Spotify home feed yet; perform a manual refresh.")
         }
+        dataStoreManager.putString(KEY_HOME_ATTEMPT_TIME, now.toString())
         val token = accessToken()
         val variables = buildJsonObject {
             put("homeEndUserIntegration", "INTEGRATION_WEB_PLAYER")
@@ -355,19 +362,22 @@ class SpotifyLibrarySyncService(
 
     suspend fun syncPlaylistTracks(
         playlistId: String,
-        dataSaverEnabled: Boolean = false,
+        dataSaverEnabled: Boolean = true,
         forceRefresh: Boolean = false,
     ): Result<String> = playlistMutex.withLock {
         runCatching {
         require(playlistId.isNotBlank()) { "Playlist ID cannot be blank" }
         val cacheKey = "$KEY_PLAYLIST_CACHE_PREFIX$playlistId"
         val timeKey = "$KEY_PLAYLIST_TIME_PREFIX$playlistId"
+        val attemptKey = "$KEY_PLAYLIST_ATTEMPT_PREFIX$playlistId"
         val now = Clock.System.now().toEpochMilliseconds()
         val last = dataStoreManager.getString(timeKey).first()?.toLongOrNull()
-        if (!SpotifySyncPolicy.shouldRefresh(last, now, SpotifySyncPolicy.DEFAULT_LIBRARY_REFRESH_INTERVAL_MS, dataSaverEnabled, forceRefresh)) {
+        val lastAttempt = dataStoreManager.getString(attemptKey).first()?.toLongOrNull()
+        if (!SpotifySyncPolicy.shouldRefresh(last, now, SpotifySyncPolicy.DEFAULT_LIBRARY_REFRESH_INTERVAL_MS, dataSaverEnabled, forceRefresh, lastAttempt)) {
             return@runCatching dataStoreManager.getString(cacheKey).first()
                 ?: error("No cached tracks for this playlist yet; perform a manual refresh.")
         }
+        dataStoreManager.putString(attemptKey, now.toString())
         val token = accessToken()
         val tracks = fetchAllPages(token, "fetchPlaylist", { offset, limit ->
             buildJsonObject {
@@ -776,8 +786,11 @@ class SpotifyLibrarySyncService(
         private const val KEY_HOME_CACHE = "spotify_sync_home_json_v1"
         private const val KEY_LIBRARY_SYNC_TIME = "spotify_sync_library_success_ms_v1"
         private const val KEY_HOME_SYNC_TIME = "spotify_sync_home_success_ms_v1"
+        private const val KEY_LIBRARY_ATTEMPT_TIME = "spotify_sync_library_attempt_ms_v1"
+        private const val KEY_HOME_ATTEMPT_TIME = "spotify_sync_home_attempt_ms_v1"
         private const val KEY_PLAYLIST_CACHE_PREFIX = "spotify_sync_playlist_json_v1_"
         private const val KEY_PLAYLIST_TIME_PREFIX = "spotify_sync_playlist_success_ms_v1_"
+        private const val KEY_PLAYLIST_ATTEMPT_PREFIX = "spotify_sync_playlist_attempt_ms_v1_"
         private const val KEY_PLAYLIST_CACHE_IDS = "spotify_sync_playlist_cache_ids_v1"
         private const val HASH_LIBRARY_V3 = "390c78e5b951029bad359785e69b07b536a509c581cbcd0aded5e5067f187455"
         private const val HASH_FETCH_PLAYLIST = "8964e8eafb21aa992a7d951d256d83285c04be2105d209262901de70cb97584a"
