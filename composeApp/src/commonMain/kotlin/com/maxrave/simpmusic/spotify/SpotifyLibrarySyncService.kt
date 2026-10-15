@@ -369,7 +369,9 @@ class SpotifyLibrarySyncService(
             putJsonArray("libraryItemUris") { add(trackUri) }
         }
         graphql(token, if (liked) "addToLibrary" else "removeFromLibrary", HASH_LIBRARY_MUTATION, variables)
-        patchLikedCache(trackUri, liked, trackWrapper)
+        libraryMutex.withLock {
+            patchLikedCache(trackUri, liked, trackWrapper)
+        }
         Unit
     }
 
@@ -554,7 +556,9 @@ class SpotifyLibrarySyncService(
             val total = container["totalCount"]?.jsonPrimitive?.intOrNull
             if (expectedTotal == null) expectedTotal = total
             output += items
-            if (items.isEmpty() || items.size < pageSize || (expectedTotal != null && output.size >= expectedTotal!!)) break
+            if (items.isEmpty()) break
+            if (expectedTotal != null && output.size >= expectedTotal!!) break
+            if (expectedTotal == null && items.size < pageSize) break
             offset += items.size
         }
         return output
