@@ -395,6 +395,14 @@ class SpotifyLibrarySyncService(
         }
     }
 
+    suspend fun setLikedByMetadata(title: String, artists: String, liked: Boolean): Result<Unit> = runCatching {
+        val wrapper = findTrackWrapper(title, artists).getOrThrow()
+            ?: error("Spotify could not find an exact title and artist match.")
+        val uri = wrapper.text("_uri") ?: wrapper.text("uri") ?: error("Spotify search result has no track URI")
+        setLiked(uri, liked, if (liked) wrapper else null).getOrThrow()
+        Unit
+    }
+
     suspend fun addTrackToPlaylistByMetadata(
         playlistId: String,
         title: String,
