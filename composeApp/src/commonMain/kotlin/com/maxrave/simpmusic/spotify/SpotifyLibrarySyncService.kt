@@ -577,10 +577,11 @@ class SpotifyLibrarySyncService(
             var node: JsonElement = response
             for (key in path) node = node.jsonObject[key] ?: error("Spotify response missing $key")
             val container = node.jsonObject
+            val rawItems = container["items"]?.jsonArray.orEmpty()
             val items = when (operation) {
-                "libraryV3" -> container["items"]?.jsonArray.orEmpty().mapNotNull { it.jsonObject["item"] }
-                "fetchLibraryTracks" -> container["items"]?.jsonArray.orEmpty()
-                else -> container["items"]?.jsonArray.orEmpty().mapNotNull { element ->
+                "libraryV3" -> rawItems.mapNotNull { (it as? JsonObject)?.get("item") }
+                "fetchLibraryTracks" -> rawItems
+                else -> rawItems.mapNotNull { element ->
                     val entry = element as? JsonObject ?: return@mapNotNull null
                     val item = entry["itemV2"] as? JsonObject ?: return@mapNotNull null
                     buildJsonObject {
@@ -593,13 +594,15 @@ class SpotifyLibrarySyncService(
             val total = container["totalCount"]?.jsonPrimitive?.intOrNull
             if (expectedTotal == null) expectedTotal = total
             output += items
-            if (items.isEmpty()) break
-            if (expectedTotal != null && output.size >= expectedTotal!!) break
-            if (expectedTotal == null && items.size < pageSize) break
-            offset += items.size
+            if (rawItems.isEmpty()) break
+            // Offset counts server-side rows, not only rows that could be parsed into a track.
+            // Some Spotify library entries can legitimately lack item data.
+            offset += rawItems.size
+            if (expectedTotal != null && offset >= expectedTotal!!) break
+            if (expectedTotal == null && rawItems.size < pageSize) break
         }
-        if (expectedTotal != null && output.size < expectedTotal!!) {
-            error("Spotify $operation pagination ended early (${output.size}/$expectedTotal items); keeping the previous local cache.")
+        if (expectedTotal != null && offset < expectedTotal!!) {
+            error("Spotify $operation pagination ended early ($offset/$expectedTotal rows); keeping the previous local cache.")
         }
         return output
     }
@@ -698,15 +701,17 @@ class SpotifyLibrarySyncService(
                     }
                 }
             }
-            val response = http.post(GRAPHQL_URL) {
-                header(HttpHeaders.Authorization, "Bearer $token")
-                header(HttpHeaders.Accept, "application/json")
-                contentType(ContentType.Application.Json)
-                setBody(body.toString())
+            val (response, responseText) = withTimeout(GRAPHQL_REQUEST_TIMEOUT_MS) {
+                val response = http.post(GRAPHQL_URL) {
+                    header(HttpHeaders.Authorization, "Bearer $token")
+                    header(HttpHeaders.Accept, "application/json")
+                    contentType(ContentType.Application.Json)
+                    setBody(body.toString())
+                }
+                response to response.bodyAsText()
             }
-            val responseText = response.bodyAsText()
             if (response.status.value == 429 && attempt < 3) {
-                delay((response.headers["Retry-After"]?.toLongOrNull() ?: (attempt + 1L) * 2L) * 1000L)
+                delay(((response.headers["Retry-After"]?.toLongOrNull() ?: (attempt + 1L) * 2L).coerceIn(1L, 30L)) * 1000L)
                 continue
             }
             if (response.status.value !in 200..299) {
@@ -754,6 +759,7 @@ class SpotifyLibrarySyncService(
         private const val HASH_REGISTRY_URL = "https://francescograzioso.github.io/Meld/spotify-gql-hashes.json"
         private const val HASH_REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000L
         private const val HASH_FETCH_TIMEOUT_MS = 10_000L
+        private const val GRAPHQL_REQUEST_TIMEOUT_MS = 20_000L
         private const val KEY_HASH_CACHE = "spotify_sync_hash_registry_json_v1"
         private const val KEY_HASH_FETCH_TIME = "spotify_sync_hash_registry_fetch_ms_v1"
         private const val GRAPHQL_URL = "https://api-partner.spotify.com/pathfinder/v1/query"
