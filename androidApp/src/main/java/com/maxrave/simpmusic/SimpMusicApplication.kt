@@ -128,7 +128,14 @@ class SimpMusicApplication :
             ImageLoader
                 .Builder(context)
                 .components {
-                    add(NetworkFirstInterceptor { imageLoader })
+                    add(
+                        NetworkFirstInterceptor(
+                            // Cover art and thumbnails rarely change at a stable URL. A longer TTL
+                            // prevents re-downloading the same images every day on limited plans.
+                            ttlMillis = 7L * 24 * 60 * 60 * 1000,
+                            imageLoader = { imageLoader },
+                        ),
+                    )
                     add(
                         OkHttpNetworkFetcherFactory(
                             callFactory = {
