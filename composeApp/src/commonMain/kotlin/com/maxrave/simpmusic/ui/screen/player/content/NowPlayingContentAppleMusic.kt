@@ -179,7 +179,7 @@ fun NowPlayingContentAppleMusic(
     val fullscreenCanvas = state.screenData.canvasData?.let { !it.isAnimatedArtwork() } == true
     val showCanvasBackdrop =
         viewState == AppleMusicView.MAIN &&
-            (fullscreenCanvas || (state.screenData.canvasData == null && state.screenData.isVideo && state.shouldShowVideo))
+            fullscreenCanvas
 
     val deviceVolumeController = rememberDeviceVolumeController()
     val typography = rememberAppleMusicTypography()
@@ -369,7 +369,8 @@ private fun AppleMusicMainView(
     val canvasData = state.screenData.canvasData
     val animatedArtwork = canvasData?.takeIf { it.isAnimatedArtwork() }
     val fullscreenCanvas = canvasData != null && animatedArtwork == null
-    val isVideoBackdrop = canvasData == null && state.screenData.isVideo && state.shouldShowVideo
+    // Audio-only build: video tracks may supply audio, but never render a video surface.
+    val isVideoBackdrop = false
 
     // Same fade/half-blended-frame fix M3E uses: fast fade-in, relaxed fade-out. Only a fullscreen
     // canvas ever hides the controls — every other artwork sits above them, not behind them.
