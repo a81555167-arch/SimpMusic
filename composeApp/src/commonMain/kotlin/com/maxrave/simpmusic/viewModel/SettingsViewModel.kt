@@ -16,6 +16,7 @@ import com.maxrave.domain.data.player.GenericCastState
 import com.maxrave.domain.data.player.ReverbPreset
 import com.maxrave.domain.extension.toNetScapeString
 import com.maxrave.domain.manager.DataStoreManager
+import com.maxrave.simpmusic.spotify.SpotifyLibrarySyncService
 import com.maxrave.domain.mediaservice.handler.DownloadHandler
 import com.maxrave.domain.repository.AccountRepository
 import com.maxrave.domain.repository.ArtistRepository
@@ -296,6 +297,7 @@ class SettingsViewModel(
         getRadioAudioOnly()
         getVideoQuality()
         getSpotifyLogIn()
+        getSpotifyDataSaverEnabled()
         getSpotifyLyrics()
         getSyncFollowToYouTube()
         getEqualizer()
@@ -1677,6 +1679,23 @@ class SettingsViewModel(
 
     private var _spotifyLogIn: MutableStateFlow<Boolean> = MutableStateFlow(false)
     val spotifyLogIn: StateFlow<Boolean> = _spotifyLogIn
+
+    private val _spotifyDataSaverEnabled = MutableStateFlow(true)
+    val spotifyDataSaverEnabled: StateFlow<Boolean> = _spotifyDataSaverEnabled
+
+    fun getSpotifyDataSaverEnabled() {
+        viewModelScope.launch {
+            val saved = dataStoreManager.getString(SpotifyLibrarySyncService.DATA_SAVER_KEY).first()
+            _spotifyDataSaverEnabled.value = saved?.toBooleanStrictOrNull() ?: true
+        }
+    }
+
+    fun setSpotifyDataSaverEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            dataStoreManager.putString(SpotifyLibrarySyncService.DATA_SAVER_KEY, enabled.toString())
+            _spotifyDataSaverEnabled.value = enabled
+        }
+    }
 
     fun getSpotifyLogIn() {
         viewModelScope.launch {
