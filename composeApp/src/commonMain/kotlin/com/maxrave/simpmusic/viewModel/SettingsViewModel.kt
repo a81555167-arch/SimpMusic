@@ -72,6 +72,7 @@ import kotlin.coroutines.cancellation.CancellationException
 
 class SettingsViewModel(
     private val dataStoreManager: DataStoreManager,
+    private val spotifySyncService: SpotifyLibrarySyncService,
     private val commonRepository: CommonRepository,
     private val songRepository: SongRepository,
     private val accountRepository: AccountRepository,
@@ -1723,6 +1724,7 @@ class SettingsViewModel(
                 dataStoreManager.setSpotifyClientTokenExpires(0)
                 dataStoreManager.setSpotifyPersonalToken("")
                 dataStoreManager.setSpotifyPersonalTokenExpires(0)
+                spotifySyncService.clearLocalCache()
                 delay(500)
             }
             getSpotifyLogIn()
