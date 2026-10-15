@@ -28,11 +28,12 @@ plugins {
 // instead of pretending the submodule itself was forked. Legacy queues can retain "Video"-prefixed
 // media IDs; Media3's resolver interprets that prefix as a request for a video stream even when the
 // video UI is disabled. Strip the video prefix from the media source cache key before the resolver runs.
+val audioOnlyCoreSource = layout.projectDirectory.file(
+    "core/media/media3/src/main/java/com/maxrave/media3/service/mediasourcefactory/MergingMediaSourceFactory.kt",
+).asFile
 val patchAudioOnlyCore = tasks.register("patchAudioOnlyCore") {
     doLast {
-        val sourceFile = rootProject.file(
-            "core/media/media3/src/main/java/com/maxrave/media3/service/mediasourcefactory/MergingMediaSourceFactory.kt",
-        )
+        val sourceFile = audioOnlyCoreSource
         if (!sourceFile.isFile) {
             throw GradleException("Audio-only core patch target is missing: ${sourceFile.path}")
         }
