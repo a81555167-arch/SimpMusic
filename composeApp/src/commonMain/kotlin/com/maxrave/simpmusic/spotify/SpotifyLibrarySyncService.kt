@@ -714,7 +714,12 @@ class SpotifyLibrarySyncService(
                 response to response.bodyAsText()
             }
             if (response.status.value == 429 && attempt < 3) {
-                delay(((response.headers["Retry-After"]?.toLongOrNull() ?: (attempt + 1L) * 2L).coerceIn(1L, 30L)) * 1000L)
+                val retryAfterSeconds = response.headers["Retry-After"]?.toLongOrNull()
+                // Respect long server cooldowns instead of repeatedly spending data on retries.
+                if (retryAfterSeconds != null && retryAfterSeconds > MAX_AUTOMATIC_RETRY_AFTER_SECONDS) {
+                    error("Spotify rate-limited this request; wait before retrying.")
+                }
+                delay((retryAfterSeconds ?: (attempt + 1L) * 2L).coerceIn(1L, MAX_AUTOMATIC_RETRY_AFTER_SECONDS) * 1000L)
                 continue
             }
             if (response.status.value !in 200..299) {
@@ -763,6 +768,7 @@ class SpotifyLibrarySyncService(
         private const val HASH_REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000L
         private const val HASH_FETCH_TIMEOUT_MS = 10_000L
         private const val GRAPHQL_REQUEST_TIMEOUT_MS = 20_000L
+        private const val MAX_AUTOMATIC_RETRY_AFTER_SECONDS = 60L
         private const val KEY_HASH_CACHE = "spotify_sync_hash_registry_json_v1"
         private const val KEY_HASH_FETCH_TIME = "spotify_sync_hash_registry_fetch_ms_v1"
         private const val GRAPHQL_URL = "https://api-partner.spotify.com/pathfinder/v1/query"
