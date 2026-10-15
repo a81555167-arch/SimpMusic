@@ -102,6 +102,7 @@ class HomeViewModel(
             _showLogInAlert.update { true }
         }
         homeJob = Job()
+        refreshHomeExtras()
         viewModelScope.launch {
             regionCodeChart.value = dataStoreManager.chartKey.first()
             exploreChart(regionCodeChart.value ?: "ZZ")
@@ -179,95 +180,71 @@ class HomeViewModel(
         homeJob?.cancel()
         homeJob =
             viewModelScope.launch {
-                combine(
-                    homeRepository.getHomeData(
-                        params,
-                        getString(Res.string.view_count),
-                        getString(Res.string.song),
-                    ),
-                    homeRepository.getMoodAndMomentsData(),
-                    homeRepository.getChartData(dataStoreManager.chartKey.first()),
-                    homeRepository.getNewRelease(
-                        getString(Res.string.new_release),
-                        getString(Res.string.music_video),
-                    ),
-                ) { home, exploreMood, exploreChart, newRelease ->
-                    HomeDataCombine(home, exploreMood, exploreChart, newRelease)
-                }.collect { result ->
-                    val home = result.home
-                    Logger.d("home size", "${home.data?.second?.size}")
-                    val exploreMoodItem = result.mood
-                    val chart = result.chart
-                    val newRelease = result.newRelease
+                homeRepository.getHomeData(
+                    params,
+                    getString(Res.string.view_count),
+                    getString(Res.string.song),
+                ).collect { home ->
                     when (home) {
                         is Resource.Success -> {
                             _continuation.value = home.data?.first
-                            _homeItemList.value = home.data?.second ?: listOf()
+                            _homeItemList.value = home.data?.second.orEmpty()
                         }
 
-                        else -> {
+                        is Resource.Error -> {
+                            // Keep the last visible home content on a transient failure. Clearing
+                            // it here would turn a brief network problem into an empty home screen.
                             _continuation.value = null
-                            _homeItemList.value = listOf()
+                            showSnackBarErrorState.emit(home.message ?: "Unable to refresh home")
+                            Logger.w(tag, "getHomeItemList: ${home.message}")
                         }
                     }
-                    if (continuation.value.isNullOrEmpty()) {
-                        _homeListState.value = ListState.PAGINATION_EXHAUST
-                    } else {
-                        _homeListState.value = ListState.IDLE
-                    }
-                    when (chart) {
-                        is Resource.Success -> {
-                            _chart.value = chart.data
+
+                    _homeListState.value =
+                        if (continuation.value.isNullOrEmpty()) {
+                            ListState.PAGINATION_EXHAUST
+                        } else {
+                            ListState.IDLE
                         }
 
-                        else -> {
-                            _chart.value = null
-                        }
-                    }
-                    when (newRelease) {
-                        is Resource.Success -> {
-                            _newRelease.value = newRelease.data ?: arrayListOf()
-                        }
-
-                        else -> {
-                            _newRelease.value = arrayListOf()
-                        }
-                    }
-                    when (exploreMoodItem) {
-                        is Resource.Success -> {
-                            _exploreMoodItem.value = exploreMoodItem.data
-                        }
-
-                        else -> {
-                            _exploreMoodItem.value = null
-                        }
-                    }
-                    regionCodeChart.value = dataStoreManager.chartKey.first()
-                    Logger.d("HomeViewModel", "getHomeItemList: $result")
-                    dataStoreManager.cookie.first().let {
-                        if (it != "") {
-                            _accountInfo.emit(
-                                Pair(
-                                    dataStoreManager.getString("AccountName").first(),
-                                    dataStoreManager.getString("AccountThumbUrl").first(),
-                                ),
-                            )
-                        }
-                    }
-                    when {
-                        home is Resource.Error -> home.message
-                        exploreMoodItem is Resource.Error -> exploreMoodItem.message
-                        chart is Resource.Error -> chart.message
-                        else -> null
-                    }?.let {
-                        showSnackBarErrorState.emit(it)
-                        Logger.w("Error", "getHomeItemList: ${home.message}")
-                        Logger.w("Error", "getHomeItemList: ${exploreMoodItem.message}")
-                        Logger.w("Error", "getHomeItemList: ${chart.message}")
+                    dataStoreManager.cookie.first().takeIf { it.isNotEmpty() }?.let {
+                        _accountInfo.emit(
+                            Pair(
+                                dataStoreManager.getString("AccountName").first(),
+                                dataStoreManager.getString("AccountThumbUrl").first(),
+                            ),
+                        )
                     }
                     loading.value = false
                 }
             }
+    }
+
+    /**
+     * Home's auxiliary shelves do not depend on the selected mood, region or login cookie.
+     * Fetch them independently so every home refresh does not also re-download genres and
+     * new-release metadata. Chart refresh is handled by [exploreChart] when its region changes.
+     */
+    private fun refreshHomeExtras() {
+        viewModelScope.launch {
+            combine(
+                homeRepository.getMoodAndMomentsData(),
+                homeRepository.getNewRelease(
+                    getString(Res.string.new_release),
+                    getString(Res.string.music_video),
+                ),
+            ) { mood, newRelease -> mood to newRelease }
+                .collect { (mood, newRelease) ->
+                    when (mood) {
+                        is Resource.Success -> _exploreMoodItem.value = mood.data
+                        is Resource.Error -> Logger.w(tag, "Home moods refresh failed: ${mood.message}")
+                    }
+                    when (newRelease) {
+                        is Resource.Success -> _newRelease.value = newRelease.data.orEmpty()
+                        is Resource.Error -> Logger.w(tag, "New releases refresh failed: ${newRelease.message}")
+                    }
+                }
+        }
     }
 
     /** A shelf's "Play all": YouTube's own finite queue of that shelf's songs. */
