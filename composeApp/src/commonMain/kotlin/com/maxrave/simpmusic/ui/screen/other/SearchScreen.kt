@@ -199,6 +199,16 @@ fun SearchScreen(
         searchViewModel.searchSongs(query)
         searchViewModel.consumePendingSongSearch()
     }
+    val pendingAllSearch by searchViewModel.pendingAllSearch.collectAsStateWithLifecycle()
+    LaunchedEffect(pendingAllSearch) {
+        val query = pendingAllSearch ?: return@LaunchedEffect
+        searchText = query
+        searchUIType = SearchUIType.SEARCH_RESULTS
+        isSearchSubmitted = true
+        searchViewModel.setSearchType(SearchType.ALL)
+        searchViewModel.searchAll(query)
+        searchViewModel.consumePendingAllSearch()
+    }
 
     val focusRequester = remember { FocusRequester() }
 
