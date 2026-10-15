@@ -1110,25 +1110,20 @@ private fun AppleMusicArtworkPage(
                 } else {
                     Crossfade(targetState = state.screenData.canvasData?.isVideo, label = "appleMusicCanvasKind") { isVideo ->
                         if (isVideo == true) {
-                            state.screenData.canvasData?.url?.let { url ->
-                                // cropToBounds, NOT the default style's fill-height-and-overflow
-                                // modifiers. Those drive MediaPlayerView's legacy path, which sizes
-                                // the surface from a `widthPx` seeded to the SCREEN width and only
-                                // corrects it once onVideoSizeChanged reports the real aspect ratio.
-                                // For a 9:16 canvas the true width is far wider than the screen, so
-                                // the first frame renders fitted and the next one jumps to cropped —
-                                // the sideways flash when returning from the Lyrics tab, where the
-                                // Crossfade had disposed this whole subtree and every remember with
-                                // it. The crop path takes its size from Media3's own
-                                // presentationState instead, so there is no wrong guess to correct,
-                                // and it holds a shutter over the surface until the first frame is
-                                // actually ready.
-                                MediaPlayerView(
-                                    url = url,
-                                    cropToBounds = true,
-                                    modifier = Modifier.fillMaxSize(),
-                                )
-                            }
+                            // Render the cached still image instead of streaming the Spotify Canvas MP4.
+                            AsyncImage(
+                                model =
+                                    ImageRequest
+                                        .Builder(LocalPlatformContext.current)
+                                        .data(state.screenData.canvasData?.canvasThumbUrl ?: state.screenData.thumbnailURL)
+                                        .diskCachePolicy(CachePolicy.ENABLED)
+                                        .diskCacheKey(state.screenData.canvasData?.canvasThumbUrl ?: state.screenData.thumbnailURL)
+                                        .crossfade(550)
+                                        .build(),
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize(),
+                            )
                         } else if (isVideo == false) {
                             AsyncImage(
                                 model =
