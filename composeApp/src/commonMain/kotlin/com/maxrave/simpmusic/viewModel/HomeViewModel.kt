@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -112,7 +113,7 @@ class HomeViewModel(
         }
         homeJob = Job()
         refreshHomeExtras()
-        loadSpotifyHomeFromCacheAndSync()
+        observeSpotifySessionAndSync()
         viewModelScope.launch {
             regionCodeChart.value = dataStoreManager.chartKey.first()
             exploreChart(regionCodeChart.value ?: "ZZ")
@@ -257,26 +258,32 @@ class HomeViewModel(
         }
     }
 
-    private fun loadSpotifyHomeFromCacheAndSync() {
+    private fun observeSpotifySessionAndSync() {
         viewModelScope.launch {
-            _spotifyHomeSections.value = spotifySyncService.parseHomeSections(spotifySyncService.cachedHomeJson())
-            if (dataStoreManager.spdc.first().isBlank()) return@launch
-            val dataSaver = spotifySyncService.isDataSaverEnabled()
-            _spotifyHomeRefreshing.value = true
-            spotifySyncService.syncHome(dataSaverEnabled = dataSaver)
-                .onSuccess { snapshot ->
-                    _spotifyHomeSections.value = spotifySyncService.parseHomeSections(snapshot)
+            dataStoreManager.spdc.distinctUntilChanged().collect { cookie ->
+                if (cookie.isBlank()) {
+                    _spotifyHomeSections.value = emptyList()
                     _spotifySyncError.value = null
+                    return@collect
                 }
-                .onFailure { error ->
-                    _spotifySyncError.value = error.message
-                    Logger.w(tag, "Spotify home sync failed: ${error.message}")
-                }
-            // The library sync has its own six-hour clock and cache. Never redownload it
-            // just because the home feed was refreshed.
-            spotifySyncService.syncLibrary(dataSaverEnabled = dataSaver)
-                .onFailure { error -> Logger.w(tag, "Spotify library sync failed: ${error.message}") }
-            _spotifyHomeRefreshing.value = false
+                _spotifyHomeSections.value = spotifySyncService.parseHomeSections(spotifySyncService.cachedHomeJson())
+                val dataSaver = spotifySyncService.isDataSaverEnabled()
+                _spotifyHomeRefreshing.value = true
+                spotifySyncService.syncHome(dataSaverEnabled = dataSaver)
+                    .onSuccess { snapshot ->
+                        _spotifyHomeSections.value = spotifySyncService.parseHomeSections(snapshot)
+                        _spotifySyncError.value = null
+                    }
+                    .onFailure { error ->
+                        _spotifySyncError.value = error.message
+                        Logger.w(tag, "Spotify home sync failed: ${error.message}")
+                    }
+                // The library sync has its own six-hour clock and cache. Never redownload it
+                // just because the home feed was refreshed.
+                spotifySyncService.syncLibrary(dataSaverEnabled = dataSaver)
+                    .onFailure { error -> Logger.w(tag, "Spotify library sync failed: ${error.message}") }
+                _spotifyHomeRefreshing.value = false
+            }
         }
     }
 
