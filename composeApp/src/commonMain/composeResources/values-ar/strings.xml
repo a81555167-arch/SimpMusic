@@ -355,4 +355,6 @@
     <string name="download_speed">سرعة التحميل %1$s </string>
     <string name="import_invalid_file">هذا الملف ليس ملف استيراد SimpMusic صالح. حول مكتبتك علي simpmusic.org أولا.</string>
     <!-- Listen Together -->
+    <string name="spotify_data_saver">توفير بيانات Spotify</string>
+    <string name="spotify_data_saver_description">احفظ قوائم Spotify ومحتوى الصفحة الرئيسية محليًا. تتوقف التحديثات التلقائية بعد المزامنة الأولى، ويمكنك التحديث يدويًا.</string>
 </resources>
