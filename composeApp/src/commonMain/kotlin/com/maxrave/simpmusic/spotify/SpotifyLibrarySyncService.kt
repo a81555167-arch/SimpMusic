@@ -76,6 +76,8 @@ class SpotifyLibrarySyncService(
     private val http = HttpClient(CIO)
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
 
+    suspend fun isLoggedIn(): Boolean = dataStoreManager.spdc.first().isNotBlank()
+
     suspend fun isDataSaverEnabled(): Boolean =
         dataStoreManager.getString(DATA_SAVER_KEY).first()?.toBooleanStrictOrNull() ?: true
 
