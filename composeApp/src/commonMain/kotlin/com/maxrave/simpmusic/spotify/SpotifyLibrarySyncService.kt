@@ -358,6 +358,9 @@ class SpotifyLibrarySyncService(
             put("syncedAt", now)
             put("feed", home)
         }.toString()
+        if (parseHomeSections(snapshot).isEmpty()) {
+            error("Spotify home feed contained no recognizable sections; keeping the previous local cache.")
+        }
         dataStoreManager.putString(KEY_HOME_CACHE, snapshot)
         dataStoreManager.putString(KEY_HOME_SYNC_TIME, now.toString())
         snapshot
@@ -379,6 +382,7 @@ class SpotifyLibrarySyncService(
         val lastAttempt = dataStoreManager.getString(attemptKey).first()?.toLongOrNull()
         if (!SpotifySyncPolicy.shouldRefresh(last, now, SpotifySyncPolicy.DEFAULT_LIBRARY_REFRESH_INTERVAL_MS, dataSaverEnabled, forceRefresh, lastAttempt)) {
             return@runCatching dataStoreManager.getString(cacheKey).first()
+                ?.takeIf { it.isNotBlank() }
                 ?: error("No cached tracks for this playlist yet; perform a manual refresh.")
         }
         dataStoreManager.putString(attemptKey, now.toString())
@@ -432,6 +436,12 @@ class SpotifyLibrarySyncService(
      */
     suspend fun findTrackWrapper(title: String, artists: String): Result<JsonObject?> = runCatching {
         require(title.isNotBlank()) { "Track title cannot be blank" }
+        val expectedTitle = normalize(title)
+        val expectedArtists = artists.split(",", "&", " feat. ", " ft. ")
+            .map(::normalize).filter { it.isNotBlank() }
+        require(expectedArtists.isNotEmpty()) {
+            "Spotify matching requires artist metadata to avoid changing the wrong track."
+        }
         val token = accessToken()
         val variables = buildJsonObject {
             put("searchTerm", listOf(title, artists).filter { it.isNotBlank() }.joinToString(" "))
@@ -448,9 +458,6 @@ class SpotifyLibrarySyncService(
         val search = response["data"]?.jsonObject?.get("searchV2") as? JsonObject
             ?: error("Spotify search response did not contain searchV2")
         val items = ((search["tracksV2"] as? JsonObject)?.get("items") as? JsonArray).orEmpty()
-        val expectedTitle = normalize(title)
-        val expectedArtists = artists.split(",", "&", " feat. ", " ft. ")
-            .map(::normalize).filter { it.isNotBlank() }
         items.firstNotNullOfOrNull { element ->
             val item = element as? JsonObject ?: return@firstNotNullOfOrNull null
             val wrapper = item["item"] as? JsonObject ?: return@firstNotNullOfOrNull null
@@ -591,7 +598,8 @@ class SpotifyLibrarySyncService(
             var node: JsonElement = response
             for (key in path) node = node.jsonObject[key] ?: error("Spotify response missing $key")
             val container = node.jsonObject
-            val rawItems = container["items"]?.jsonArray.orEmpty()
+            val rawItems = container["items"]?.jsonArray
+                ?: error("Spotify $operation response did not contain an items array; keeping the previous local cache.")
             val items = when (operation) {
                 "libraryV3" -> rawItems.mapNotNull { (it as? JsonObject)?.get("item") }
                 "fetchLibraryTracks" -> rawItems
