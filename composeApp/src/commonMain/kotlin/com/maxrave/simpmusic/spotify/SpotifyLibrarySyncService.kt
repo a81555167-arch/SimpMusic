@@ -540,8 +540,7 @@ class SpotifyLibrarySyncService(
             }
         }
         graphql(token, "addToPlaylist", HASH_PLAYLIST_MUTATION, variables)
-        dataStoreManager.putString("$KEY_PLAYLIST_TIME_PREFIX$playlistId", "0")
-        syncPlaylistTracks(playlistId, dataSaverEnabled = false, forceRefresh = true).getOrThrow()
+        invalidatePlaylistCache(playlistId)
         Unit
     }
 
@@ -555,9 +554,31 @@ class SpotifyLibrarySyncService(
             putJsonArray("uids") { itemUids.forEach { add(JsonPrimitive(it)) } }
         }
         graphql(token, "removeFromPlaylist", HASH_PLAYLIST_MUTATION, variables)
-        dataStoreManager.putString("$KEY_PLAYLIST_TIME_PREFIX$playlistId", "0")
-        syncPlaylistTracks(playlistId, dataSaverEnabled = false, forceRefresh = true).getOrThrow()
+        patchPlaylistCacheAfterRemoval(playlistId, itemUids)
+        invalidatePlaylistCache(playlistId)
         Unit
+    }
+
+    private suspend fun invalidatePlaylistCache(playlistId: String) {
+        dataStoreManager.putString("$KEY_PLAYLIST_TIME_PREFIX$playlistId", "0")
+        dataStoreManager.putString("$KEY_PLAYLIST_ATTEMPT_PREFIX$playlistId", "0")
+    }
+
+    private suspend fun patchPlaylistCacheAfterRemoval(playlistId: String, itemUids: List<String>) {
+        val cacheKey = "$KEY_PLAYLIST_CACHE_PREFIX$playlistId"
+        val raw = dataStoreManager.getString(cacheKey).first()?.takeIf { it.isNotBlank() } ?: return
+        val root = runCatching { json.parseToJsonElement(raw) as? JsonObject }.getOrNull() ?: return
+        val tracks = root["tracks"] as? JsonArray ?: return
+        val removed = itemUids.toSet()
+        val updatedTracks = tracks.filterNot { element ->
+            val entry = element as? JsonObject ?: return@filterNot false
+            entry.text("uid")?.let { it in removed } == true
+        }
+        val updated = buildJsonObject {
+            root.forEach { (key, value) -> put(key, value) }
+            put("tracks", JsonArray(updatedTracks))
+        }
+        dataStoreManager.putString(cacheKey, updated.toString())
     }
 
     private suspend fun accessToken(): String = tokenMutex.withLock {

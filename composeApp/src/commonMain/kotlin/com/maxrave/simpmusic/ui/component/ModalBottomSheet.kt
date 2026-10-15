@@ -178,7 +178,9 @@ import com.maxrave.simpmusic.ui.icon.SyncDisabled
 import com.maxrave.simpmusic.ui.icon.ThumbDownOutline
 import com.maxrave.simpmusic.ui.icon.Tune
 import com.maxrave.simpmusic.ui.icon.Update
+import com.maxrave.simpmusic.spotify.SpotifyLibrarySyncService
 import com.maxrave.simpmusic.ui.navigation.destination.list.AlbumDestination
+import com.maxrave.simpmusic.ui.screen.player.SpotifyAddToPlaylistSheet
 import com.maxrave.simpmusic.ui.navigation.destination.list.ArtistDestination
 import com.maxrave.simpmusic.ui.theme.seed
 import com.maxrave.simpmusic.ui.theme.typo
@@ -187,6 +189,7 @@ import com.maxrave.simpmusic.viewModel.NowPlayingBottomSheetViewModel
 import com.maxrave.simpmusic.viewModel.SharedViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -1363,6 +1366,7 @@ fun NowPlayingBottomSheet(
     /** Called with the videoId of the track this sheet shows. */
     onYouTubeDislike: (videoId: String) -> Unit = {},
     dataStoreManager: DataStoreManager = koinInject<DataStoreManager>(),
+    spotifySyncService: SpotifyLibrarySyncService = koinInject<SpotifyLibrarySyncService>(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val coroutineScope = rememberCoroutineScope()
@@ -1379,6 +1383,7 @@ fun NowPlayingBottomSheet(
         }
 
     var addToAPlaylist by remember { mutableStateOf(false) }
+    var showSpotifyAddToPlaylist by remember { mutableStateOf(false) }
     var artist by remember { mutableStateOf(false) }
     var mainLyricsProvider by remember { mutableStateOf(false) }
     var sleepTimer by remember { mutableStateOf(false) }
@@ -1387,10 +1392,22 @@ fun NowPlayingBottomSheet(
     var changePlaybackSpeedPitch by remember { mutableStateOf(false) }
     val crossfadeEnabled by dataStoreManager.crossfadeEnabled.collectAsState(DataStoreManager.FALSE)
 
-    LaunchedEffect(uiState) {
-        if (uiState.songUIState.videoId.isNotEmpty() && !isBottomSheetVisible) {
+    LaunchedEffect(uiState, showSpotifyAddToPlaylist) {
+        if (uiState.songUIState.videoId.isNotEmpty() && !isBottomSheetVisible && !showSpotifyAddToPlaylist) {
             isBottomSheetVisible = true
         }
+    }
+
+    if (showSpotifyAddToPlaylist) {
+        SpotifyAddToPlaylistSheet(
+            songTitle = uiState.songUIState.title,
+            artists = uiState.songUIState.listArtists.toListName().connectArtists(),
+            onDismiss = {
+                showSpotifyAddToPlaylist = false
+                onDismiss()
+            },
+            service = spotifySyncService,
+        )
     }
 
     LaunchedEffect(key1 = song) {
@@ -1712,7 +1729,25 @@ fun NowPlayingBottomSheet(
                         defaultChecked = uiState.songUIState.liked,
                         isHeartIcon = true,
                         onChangeListener = {
+                            val desiredLikedState = !uiState.songUIState.liked
+                            val trackTitle = uiState.songUIState.title
+                            val trackArtists = uiState.songUIState.listArtists.toListName().connectArtists()
                             viewModel.onUIEvent(NowPlayingBottomSheetUIEvent.ToggleLike)
+                            coroutineScope.launch {
+                                if (
+                                    trackTitle.isNotBlank() &&
+                                    trackArtists.isNotBlank() &&
+                                    dataStoreManager.spdc.first().orEmpty().isNotBlank()
+                                ) {
+                                    spotifySyncService.setLikedByMetadata(
+                                        title = trackTitle,
+                                        artists = trackArtists,
+                                        liked = desiredLikedState,
+                                    ).onFailure { error ->
+                                        Logger.w("SpotifySync", "Could not mirror Liked Songs change: ${error.message}")
+                                    }
+                                }
+                            }
                         },
                     )
                     if (youTubeDislike != null) {
@@ -1763,6 +1798,18 @@ fun NowPlayingBottomSheet(
                     ) {
                         viewModel.resetPlaylists()
                         addToAPlaylist = true
+                    }
+                    ActionButton(
+                        icon = SimpIcons.PlaylistAdd,
+                        text = null,
+                        textString = "Add to Spotify playlist",
+                        enable = uiState.songUIState.title.isNotBlank(),
+                    ) {
+                        coroutineScope.launch {
+                            modelBottomSheetState.hide()
+                            isBottomSheetVisible = false
+                            showSpotifyAddToPlaylist = true
+                        }
                     }
                     // A queue row is already in the queue: its own rows above move it instead.
                     if (queuePosition == null) {
