@@ -21,6 +21,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
@@ -402,7 +403,7 @@ class SpotifyLibrarySyncService(
         require(trackUri.startsWith("spotify:track:")) { "Expected a Spotify track URI" }
         val token = accessToken()
         val variables = buildJsonObject {
-            putJsonArray("libraryItemUris") { add(trackUri) }
+            putJsonArray("libraryItemUris") { add(JsonPrimitive(trackUri)) }
         }
         graphql(token, if (liked) "addToLibrary" else "removeFromLibrary", HASH_LIBRARY_MUTATION, variables)
         libraryMutex.withLock {
@@ -507,7 +508,7 @@ class SpotifyLibrarySyncService(
         val token = accessToken()
         val variables = buildJsonObject {
             put("playlistUri", "spotify:playlist:$playlistId")
-            putJsonArray("playlistItemUris") { trackUris.forEach { add(it) } }
+            putJsonArray("playlistItemUris") { trackUris.forEach { add(JsonPrimitive(it)) } }
             putJsonObject("newPosition") {
                 put("moveType", "BOTTOM_OF_PLAYLIST")
                 put("fromUid", JsonNull)
@@ -526,7 +527,7 @@ class SpotifyLibrarySyncService(
         val token = accessToken()
         val variables = buildJsonObject {
             put("playlistUri", "spotify:playlist:$playlistId")
-            putJsonArray("uids") { itemUids.forEach { add(it) } }
+            putJsonArray("uids") { itemUids.forEach { add(JsonPrimitive(it)) } }
         }
         graphql(token, "removeFromPlaylist", HASH_PLAYLIST_MUTATION, variables)
         dataStoreManager.putString("$KEY_PLAYLIST_TIME_PREFIX$playlistId", "0")
@@ -604,14 +605,14 @@ class SpotifyLibrarySyncService(
     }
 
     private fun playlistVariables(offset: Int, limit: Int) = buildJsonObject {
-        putJsonArray("filters") { add("Playlists") }
+        putJsonArray("filters") { add(JsonPrimitive("Playlists")) }
         put("order", JsonNull)
         put("textFilter", "")
         putJsonArray("features") {
-            add("LIKED_SONGS")
-            add("YOUR_EPISODES_V2")
-            add("PRERELEASES")
-            add("EVENTS")
+            add(JsonPrimitive("LIKED_SONGS"))
+            add(JsonPrimitive("YOUR_EPISODES_V2"))
+            add(JsonPrimitive("PRERELEASES"))
+            add(JsonPrimitive("EVENTS"))
         }
         put("limit", limit)
         put("offset", offset)
