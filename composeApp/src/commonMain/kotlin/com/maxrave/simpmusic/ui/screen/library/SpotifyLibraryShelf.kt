@@ -26,17 +26,17 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
+import kotlinx.coroutines.launch
 import coil3.compose.AsyncImage
-import com.maxrave.simpmusic.spotify.SpotifyHomeCard
 import com.maxrave.simpmusic.spotify.SpotifyLibraryPlaylist
 import com.maxrave.simpmusic.spotify.SpotifyLibrarySnapshot
 import com.maxrave.simpmusic.spotify.SpotifyLibrarySyncService
@@ -51,6 +51,8 @@ fun SpotifyLibraryShelf(
     navController: NavController,
     modifier: Modifier = Modifier,
 ) {
+    val coroutineScope = rememberCoroutineScope()
+    var spotifyLoggedIn by remember { mutableStateOf(false) }
     var library by remember { mutableStateOf(SpotifyLibrarySnapshot(emptyList(), emptyList())) }
     var selectedPlaylist by remember { mutableStateOf<SpotifyLibraryPlaylist?>(null) }
     var showLikedSongs by remember { mutableStateOf(false) }
@@ -76,8 +78,9 @@ fun SpotifyLibraryShelf(
     }
 
     LaunchedEffect(Unit) {
+        spotifyLoggedIn = service.isLoggedIn()
         service.cachedLibraryJson()?.let { library = service.parseLibrarySnapshot(it) }
-        if (service.isLoggedIn()) loadLibrary(force = false)
+        if (spotifyLoggedIn) loadLibrary(force = false)
     }
 
     LaunchedEffect(selectedPlaylist?.id) {
@@ -92,7 +95,7 @@ fun SpotifyLibraryShelf(
         loading = false
     }
 
-    if (service.isLoggedIn() || library.playlists.isNotEmpty() || library.likedTracks.isNotEmpty()) {
+    if (spotifyLoggedIn || library.playlists.isNotEmpty() || library.likedTracks.isNotEmpty()) {
         Column(
             modifier = modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -106,7 +109,7 @@ fun SpotifyLibraryShelf(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                TextButton(onClick = { kotlinx.coroutines.MainScope().kotlinx.coroutines.launch { loadLibrary(force = true) } }, enabled = !refreshing) {
+                TextButton(onClick = { coroutineScope.launch { loadLibrary(force = true) } }, enabled = !refreshing) {
                     if (refreshing) CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                     else Text("Refresh")
                 }
@@ -160,7 +163,7 @@ fun SpotifyLibraryShelf(
                         TextButton(
                             onClick = {
                                 val playlist = selectedPlaylist ?: return@TextButton
-                                kotlinx.coroutines.MainScope().kotlinx.coroutines.launch {
+                                coroutineScope.launch {
                                     loading = true
                                     service.syncPlaylistTracks(playlist.id, dataSaverEnabled = false, forceRefresh = true)
                                         .onSuccess { selectedTracks = service.parsePlaylistTracks(it) }
@@ -211,7 +214,7 @@ fun SpotifyLibraryShelf(
                             }
                             TextButton(
                                 onClick = {
-                                    kotlinx.coroutines.MainScope().kotlinx.coroutines.launch {
+                                    coroutineScope.launch {
                                         if (showLikedSongs) {
                                             service.setLiked(track.uri, false).onSuccess {
                                                 service.cachedLibraryJson()?.let { raw ->
