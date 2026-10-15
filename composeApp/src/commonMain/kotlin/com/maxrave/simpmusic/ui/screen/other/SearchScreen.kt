@@ -190,6 +190,17 @@ fun SearchScreen(
     var isSearchSubmitted by rememberSaveable { mutableStateOf(false) }
     var isExpanded by rememberSaveable { mutableStateOf(false) }
 
+    val pendingSongSearch by searchViewModel.pendingSongSearch.collectAsStateWithLifecycle()
+    LaunchedEffect(pendingSongSearch) {
+        val query = pendingSongSearch ?: return@LaunchedEffect
+        searchText = query
+        searchUIType = SearchUIType.SEARCH_RESULTS
+        isSearchSubmitted = true
+        searchViewModel.setSearchType(SearchType.SONGS)
+        searchViewModel.searchSongs(query)
+        searchViewModel.consumePendingSongSearch()
+    }
+
     val focusRequester = remember { FocusRequester() }
 
     var isFocused by rememberSaveable { mutableStateOf(false) }
