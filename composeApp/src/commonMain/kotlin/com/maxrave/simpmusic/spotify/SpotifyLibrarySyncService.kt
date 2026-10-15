@@ -616,6 +616,9 @@ class SpotifyLibrarySyncService(
             if (!force && lastFetch != null && now >= lastFetch && now - lastFetch < HASH_REFRESH_INTERVAL_MS) {
                 return@withLock
             }
+            // Throttle failed fetches too; otherwise an offline device would spend ten seconds
+            // retrying the same tiny registry before every GraphQL operation.
+            dataStoreManager.putString(KEY_HASH_FETCH_TIME, now.toString())
             try {
                 val response = withTimeout(HASH_FETCH_TIMEOUT_MS) {
                     http.get(HASH_REGISTRY_URL) {
