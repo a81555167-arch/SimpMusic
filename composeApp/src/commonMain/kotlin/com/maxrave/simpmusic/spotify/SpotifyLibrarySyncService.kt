@@ -54,6 +54,13 @@ class SpotifyLibrarySyncService(
     private val http = HttpClient(CIO)
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
 
+    suspend fun isDataSaverEnabled(): Boolean =
+        dataStoreManager.getString(DATA_SAVER_KEY).first()?.toBooleanStrictOrNull() ?: true
+
+    suspend fun setDataSaverEnabled(enabled: Boolean) {
+        dataStoreManager.putString(DATA_SAVER_KEY, enabled.toString())
+    }
+
     suspend fun cachedLibraryJson(): String? = dataStoreManager.getString(KEY_LIBRARY_CACHE).first()
     suspend fun cachedHomeJson(): String? = dataStoreManager.getString(KEY_HOME_CACHE).first()
     suspend fun cachedPlaylistTracksJson(playlistId: String): String? =
@@ -387,6 +394,7 @@ class SpotifyLibrarySyncService(
     }
 
     companion object {
+        const val DATA_SAVER_KEY = "spotify_sync_data_saver_enabled_v1"
         private const val TOKEN_REFRESH_SKEW_MS = 60_000L
         private const val GRAPHQL_URL = "https://api-partner.spotify.com/pathfinder/v1/query"
         private const val KEY_LIBRARY_CACHE = "spotify_sync_library_json_v1"
