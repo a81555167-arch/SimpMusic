@@ -748,6 +748,23 @@ class SpotifyLibrarySyncService(
                 delay((retryAfterSeconds ?: (attempt + 1L) * 2L).coerceIn(1L, MAX_AUTOMATIC_RETRY_AFTER_SECONDS) * 1000L)
                 continue
             }
+            if (response.status.value == 412 && attempt < 3) {
+                // Meld treats HTTP 412 as a persisted-query rejection. Refresh hashes once,
+                // then try the new hash or the registry's previous hash before failing closed.
+                if (attempt == 0) refreshHashRegistry(force = true)
+                val refreshed = operationHashes[operation]
+                val previous = previousHashes[operation]
+                val nextHash = when {
+                    refreshed != null && refreshed != activeHash -> refreshed
+                    previous != null && previous != activeHash -> previous
+                    else -> null
+                }
+                if (nextHash != null) {
+                    activeHash = nextHash
+                    continue
+                }
+                error("Spotify $operation rejected its persisted-query hash (HTTP 412); refresh the app's hash registry and retry.")
+            }
             if (response.status.value !in 200..299) {
                 if (response.status.value >= 500 && attempt < 3) {
                     delay((attempt + 1L) * 500L)
