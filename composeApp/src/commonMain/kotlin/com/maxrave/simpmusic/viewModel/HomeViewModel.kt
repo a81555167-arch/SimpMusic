@@ -34,6 +34,13 @@ import simpmusic.composeapp.generated.resources.new_release
 import simpmusic.composeapp.generated.resources.song
 import simpmusic.composeapp.generated.resources.view_count
 
+private data class HomeInputs(
+    val location: String,
+    val language: String,
+    val cookie: String,
+    val params: String?,
+)
+
 class HomeViewModel(
     private val dataStoreManager: DataStoreManager,
     private val homeRepository: HomeRepository,
@@ -100,52 +107,37 @@ class HomeViewModel(
             exploreChart(regionCodeChart.value ?: "ZZ")
             language = dataStoreManager.getString(SELECTED_LANGUAGE).first()
                 ?: SUPPORTED_LANGUAGE.codes.first()
-            //  refresh when region change
-            val job1 =
+            // One combined trigger prevents the initial emissions of several independent
+            // collectors from launching duplicate, overlapping home requests. Location,
+            // language, cookie and pagination changes are coalesced into a single refresh.
+            val homeInputs = combine(
+                dataStoreManager.location,
+                dataStoreManager.language,
+                dataStoreManager.cookie,
+                params,
+            ) { location, selectedLanguage, cookie, currentParams ->
+                HomeInputs(location, selectedLanguage, cookie, currentParams)
+            }
+            val refreshHomeJob =
                 launch {
-                    dataStoreManager.location.distinctUntilChanged().collect {
-                        regionCode = it
-                        getHomeItemList(params.value)
-                    }
-                }
-            //  refresh when language change
-            val job2 =
-                launch {
-                    dataStoreManager.language.distinctUntilChanged().collect {
-                        language = it
-                        getHomeItemList(params.value)
-                    }
-                }
-            val job3 =
-                launch {
-                    dataStoreManager.cookie.distinctUntilChanged().collect {
-                        getHomeItemList(params.value)
-                        _accountInfo.emit(
-                            Pair(
-                                dataStoreManager.getString("AccountName").first(),
-                                dataStoreManager.getString("AccountThumbUrl").first(),
-                            ),
-                        )
-                    }
-                }
-            val job4 =
-                launch {
-                    params.collectLatest {
-                        getHomeItemList(it)
-                    }
-                }
-            val job5 =
-                launch {
-                    dataStoreManager
-                        .cookie
+                    homeInputs
                         .distinctUntilChanged()
-                        .collectLatest {
-                            if (it.isNotEmpty()) {
-                                Logger.w(tag, "Cookie changed, refreshing home")
-                                loading.value = true
-                                delay(1000) // To wait for the cookie to be saved properly
-                                getHomeItemList(params.value)
-                            }
+                        .collectLatest { inputs ->
+                            regionCode = inputs.location
+                            language = inputs.language
+                            _accountInfo.emit(
+                                if (inputs.cookie.isNotEmpty()) {
+                                    Pair(
+                                        dataStoreManager.getString("AccountName").first(),
+                                        dataStoreManager.getString("AccountThumbUrl").first(),
+                                    )
+                                } else {
+                                    null
+                                },
+                            )
+                            // Briefly coalesce bursts from login/cookie and preference updates.
+                            delay(250)
+                            getHomeItemList(inputs.params)
                         }
                 }
             val job6 =
@@ -161,11 +153,7 @@ class HomeViewModel(
                                 ?.url
                     }
                 }
-            job1.join()
-            job2.join()
-            job3.join()
-            job4.join()
-            job5.join()
+            refreshHomeJob.join()
             job6.join()
         }
     }
