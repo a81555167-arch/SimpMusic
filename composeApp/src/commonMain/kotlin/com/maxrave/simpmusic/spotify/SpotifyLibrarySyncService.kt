@@ -4,6 +4,7 @@ import com.maxrave.domain.manager.DataStoreManager
 import com.maxrave.spotify.Spotify
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
+import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
@@ -15,6 +16,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -80,6 +82,20 @@ class SpotifyLibrarySyncService(
     private val homeMutex = Mutex()
     private val playlistMutex = Mutex()
     private val tokenMutex = Mutex()
+    private val hashMutex = Mutex()
+    private var hashRegistryLoaded = false
+    private val operationHashes = mutableMapOf(
+        "libraryV3" to HASH_LIBRARY_V3,
+        "fetchPlaylist" to HASH_FETCH_PLAYLIST,
+        "fetchLibraryTracks" to HASH_LIBRARY_TRACKS,
+        "addToPlaylist" to HASH_PLAYLIST_MUTATION,
+        "removeFromPlaylist" to HASH_PLAYLIST_MUTATION,
+        "addToLibrary" to HASH_LIBRARY_MUTATION,
+        "removeFromLibrary" to HASH_LIBRARY_MUTATION,
+        "home" to HASH_HOME,
+        "searchDesktop" to HASH_SEARCH,
+    )
+    private val previousHashes = mutableMapOf<String, String>()
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
 
     suspend fun isLoggedIn(): Boolean = dataStoreManager.spdc.first().isNotBlank()
@@ -587,24 +603,74 @@ class SpotifyLibrarySyncService(
         put("limit", limit)
     }
 
+    private suspend fun refreshHashRegistry(force: Boolean = false) {
+        hashMutex.withLock {
+            val now = Clock.System.now().toEpochMilliseconds()
+            if (!hashRegistryLoaded) {
+                dataStoreManager.getString(KEY_HASH_CACHE).first()
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let(::applyHashRegistry)
+                hashRegistryLoaded = true
+            }
+            val lastFetch = dataStoreManager.getString(KEY_HASH_FETCH_TIME).first()?.toLongOrNull()
+            if (!force && lastFetch != null && now >= lastFetch && now - lastFetch < HASH_REFRESH_INTERVAL_MS) {
+                return@withLock
+            }
+            try {
+                val response = withTimeout(HASH_FETCH_TIMEOUT_MS) {
+                    http.get(HASH_REGISTRY_URL) {
+                        header(HttpHeaders.Accept, "application/json")
+                    }
+                }
+                if (response.status.value !in 200..299) return@withLock
+                val raw = response.bodyAsText()
+                if (applyHashRegistry(raw)) {
+                    dataStoreManager.putString(KEY_HASH_CACHE, raw)
+                    dataStoreManager.putString(KEY_HASH_FETCH_TIME, now.toString())
+                }
+            } catch (_: Exception) {
+                // The last cached registry and hardcoded release hashes remain available offline.
+            }
+        }
+    }
+
+    private fun applyHashRegistry(raw: String): Boolean = runCatching {
+        val root = json.parseToJsonElement(raw) as? JsonObject ?: return@runCatching false
+        val operations = root["operations"] as? JsonObject ?: return@runCatching false
+        var applied = 0
+        operations.forEach { (operation, value) ->
+            val entry = value as? JsonObject ?: return@forEach
+            val hash = entry["hash"]?.jsonPrimitive?.contentOrNull
+                ?.takeIf { it.length == 64 && it.all(Char::isLetterOrDigit) }
+                ?: return@forEach
+            operationHashes[operation] = hash
+            entry["previous_hash"]?.jsonPrimitive?.contentOrNull
+                ?.takeIf { it.length == 64 }
+                ?.let { previousHashes[operation] = it }
+            applied++
+        }
+        applied > 0
+    }.getOrDefault(false)
+
     private suspend fun graphql(
         token: String,
         operation: String,
         hash: String,
         variables: JsonObject,
     ): JsonObject {
-        val body = buildJsonObject {
-            put("operationName", operation)
-            put("variables", variables)
-            putJsonObject("extensions") {
-                putJsonObject("persistedQuery") {
-                    put("version", 1)
-                    put("sha256Hash", hash)
+        refreshHashRegistry()
+        var activeHash = operationHashes[operation] ?: hash
+        for (attempt in 0..3) {
+            val body = buildJsonObject {
+                put("operationName", operation)
+                put("variables", variables)
+                putJsonObject("extensions") {
+                    putJsonObject("persistedQuery") {
+                        put("version", 1)
+                        put("sha256Hash", activeHash)
+                    }
                 }
             }
-        }
-        var lastError: Throwable? = null
-        for (attempt in 0..2) {
             val response = http.post(GRAPHQL_URL) {
                 header(HttpHeaders.Authorization, "Bearer $token")
                 header(HttpHeaders.Accept, "application/json")
@@ -612,32 +678,57 @@ class SpotifyLibrarySyncService(
                 setBody(body.toString())
             }
             val responseText = response.bodyAsText()
-            if (response.status.value == 429 && attempt < 2) {
+            if (response.status.value == 429 && attempt < 3) {
                 delay((response.headers["Retry-After"]?.toLongOrNull() ?: (attempt + 1L) * 2L) * 1000L)
                 continue
             }
             if (response.status.value !in 200..299) {
-                lastError = IllegalStateException("Spotify $operation request failed (HTTP ${response.status.value})")
-                if (response.status.value >= 500 && attempt < 2) {
+                if (response.status.value >= 500 && attempt < 3) {
                     delay((attempt + 1L) * 500L)
                     continue
                 }
-                throw lastError
+                error("Spotify $operation request failed (HTTP ${response.status.value})")
             }
             val parsed = json.parseToJsonElement(responseText).jsonObject
             val errors = parsed["errors"]?.jsonArray.orEmpty()
             if (errors.isNotEmpty()) {
                 val message = errors.first().jsonObject["message"]?.jsonPrimitive?.contentOrNull.orEmpty()
+                val persistedQueryRejected =
+                    message.contains("PersistedQueryNotFound", ignoreCase = true) ||
+                    message.contains("PersistedQueryNotSupported", ignoreCase = true)
+                if (persistedQueryRejected && attempt == 0) {
+                    refreshHashRegistry(force = true)
+                    val refreshed = operationHashes[operation]
+                    val previous = previousHashes[operation]
+                    activeHash = when {
+                        refreshed != null && refreshed != activeHash -> refreshed
+                        previous != null && previous != activeHash -> previous
+                        else -> activeHash
+                    }
+                    if (activeHash != hash || previous != null) continue
+                }
+                if (persistedQueryRejected && attempt == 1) {
+                    val previous = previousHashes[operation]
+                    if (previous != null && previous != activeHash) {
+                        activeHash = previous
+                        continue
+                    }
+                }
                 throw IllegalStateException("Spotify $operation failed: $message")
             }
             return parsed
         }
-        throw lastError ?: IllegalStateException("Spotify $operation failed")
+        error("Spotify $operation failed after retries")
     }
 
     companion object {
         const val DATA_SAVER_KEY = "spotify_sync_data_saver_enabled_v1"
         private const val TOKEN_REFRESH_SKEW_MS = 60_000L
+        private const val HASH_REGISTRY_URL = "https://francescograzioso.github.io/Meld/spotify-gql-hashes.json"
+        private const val HASH_REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000L
+        private const val HASH_FETCH_TIMEOUT_MS = 10_000L
+        private const val KEY_HASH_CACHE = "spotify_sync_hash_registry_json_v1"
+        private const val KEY_HASH_FETCH_TIME = "spotify_sync_hash_registry_fetch_ms_v1"
         private const val GRAPHQL_URL = "https://api-partner.spotify.com/pathfinder/v1/query"
         private const val KEY_LIBRARY_CACHE = "spotify_sync_library_json_v1"
         private const val KEY_HOME_CACHE = "spotify_sync_home_json_v1"
@@ -645,12 +736,12 @@ class SpotifyLibrarySyncService(
         private const val KEY_HOME_SYNC_TIME = "spotify_sync_home_success_ms_v1"
         private const val KEY_PLAYLIST_CACHE_PREFIX = "spotify_sync_playlist_json_v1_"
         private const val KEY_PLAYLIST_TIME_PREFIX = "spotify_sync_playlist_success_ms_v1_"
-        private const val HASH_LIBRARY_V3 = "973e511ca44261fda7eebac8b653155e7caee3675abb4fb110cc1b8c78b091c3"
-        private const val HASH_FETCH_PLAYLIST = "346811f856fb0b7e4f6c59f8ebea78dd081c6e2fb01b77c954b26259d5fc6763"
+        private const val HASH_LIBRARY_V3 = "390c78e5b951029bad359785e69b07b536a509c581cbcd0aded5e5067f187455"
+        private const val HASH_FETCH_PLAYLIST = "8964e8eafb21aa992a7d951d256d83285c04be2105d209262901de70cb97584a"
         private const val HASH_LIBRARY_TRACKS = "087278b20b743578a6262c2b0b4bcd20d879c503cc359a2285baf083ef944240"
-        private const val HASH_PLAYLIST_MUTATION = "47b2a1234b17748d332dd0431534f22450e9ecbb3d5ddcdacbd83368636a0990"
-        private const val HASH_LIBRARY_MUTATION = "7c5a69420e2bfae3da5cc4e14cbc8bb3f6090f80afc00ffc179177f19be3f33d"
-        private const val HASH_HOME = "23e37f2e58d82d567f27080101d36609009d8c3676457b1086cb0acc55b72a5d"
-        private const val HASH_SEARCH = "4801118d4a100f756e833d33984436a3899cff359c532f8fd3aaf174b60b3b49"
+        private const val HASH_PLAYLIST_MUTATION = "b907ad6b088d5bf7680fa81198996d58398c2d55dfcdf59fcc959e0be98a418a"
+        private const val HASH_LIBRARY_MUTATION = "896ebcb47815681340860d121cb5d494e157e2a78d3950385cd54e0393c67148"
+        private const val HASH_HOME = "5fb7da7a03ee2776c0670856609cb85a189a3cecc36cc160b91cde79063b9cf1"
+        private const val HASH_SEARCH = "db61238974d27839a136c9dc02bfdbe3fab7635f21cf85976ebff9a1ee281345"
     }
 }
