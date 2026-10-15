@@ -29,6 +29,28 @@ import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
 import kotlin.time.Clock
 
+data class SpotifyLibraryPlaylist(
+    val id: String,
+    val name: String,
+    val uri: String,
+    val imageUrl: String?,
+    val trackCount: Int,
+)
+
+data class SpotifyLibraryTrack(
+    val uri: String,
+    val name: String,
+    val artists: String,
+    val albumName: String?,
+    val imageUrl: String?,
+    val uid: String? = null,
+)
+
+data class SpotifyLibrarySnapshot(
+    val playlists: List<SpotifyLibraryPlaylist>,
+    val likedTracks: List<SpotifyLibraryTrack>,
+)
+
 data class SpotifyHomeCard(
     val title: String,
     val uri: String,
@@ -74,6 +96,82 @@ class SpotifyLibrarySyncService(
     suspend fun cachedHomeJson(): String? = dataStoreManager.getString(KEY_HOME_CACHE).first()
     suspend fun cachedPlaylistTracksJson(playlistId: String): String? =
         dataStoreManager.getString("$KEY_PLAYLIST_CACHE_PREFIX$playlistId").first()
+
+    /** Parses the persistent library snapshot without making network requests. */
+    fun parseLibrarySnapshot(snapshot: String?): SpotifyLibrarySnapshot {
+        if (snapshot.isNullOrBlank()) return SpotifyLibrarySnapshot(emptyList(), emptyList())
+        return runCatching {
+            val root = json.parseToJsonElement(snapshot) as? JsonObject
+                ?: return@runCatching SpotifyLibrarySnapshot(emptyList(), emptyList())
+            val playlists = ((root["playlists"] as? JsonArray).orEmpty()).mapNotNull { element ->
+                runCatching {
+                    val wrapper = element as? JsonObject ?: return@runCatching null
+                    val uri = wrapper.text("_uri") ?: wrapper.text("uri") ?: return@runCatching null
+                    if (!uri.startsWith("spotify:playlist:")) return@runCatching null
+                    val data = wrapper["data"] as? JsonObject ?: return@runCatching null
+                    val name = data.text("name") ?: return@runCatching null
+                    val images = data["images"] as? JsonObject
+                    val imageItems = images?.get("items") as? JsonArray
+                    val firstImage = imageItems?.firstOrNull() as? JsonObject
+                    val sources = firstImage?.get("sources") as? JsonArray
+                    val imageUrl = (sources?.firstOrNull() as? JsonObject)?.text("url")
+                    val content = data["content"] as? JsonObject
+                    val tracks = data["tracks"] as? JsonObject
+                    val trackCount = content?.text("totalCount")?.toIntOrNull()
+                        ?: tracks?.text("total")?.toIntOrNull()
+                        ?: 0
+                    SpotifyLibraryPlaylist(
+                        id = uri.substringAfterLast(":"),
+                        name = name,
+                        uri = uri,
+                        imageUrl = imageUrl,
+                        trackCount = trackCount,
+                    )
+                }.getOrNull()
+            }
+            val likedTracks = ((root["likedTracks"] as? JsonArray).orEmpty()).mapNotNull { element ->
+                runCatching {
+                    val entry = element as? JsonObject ?: return@runCatching null
+                    val wrapper = (entry["track"] as? JsonObject) ?: entry
+                    parseTrackWrapper(wrapper)
+                }.getOrNull()
+            }
+            SpotifyLibrarySnapshot(playlists, likedTracks)
+        }.getOrDefault(SpotifyLibrarySnapshot(emptyList(), emptyList()))
+    }
+
+    /** Parses the locally cached track page for a playlist, including Spotify's per-item UID. */
+    fun parsePlaylistTracks(snapshot: String?): List<SpotifyLibraryTrack> {
+        if (snapshot.isNullOrBlank()) return emptyList()
+        return runCatching {
+            val root = json.parseToJsonElement(snapshot) as? JsonObject ?: return@runCatching emptyList()
+            ((root["tracks"] as? JsonArray).orEmpty()).mapNotNull { element ->
+                runCatching {
+                    val wrapper = element as? JsonObject ?: return@runCatching null
+                    parseTrackWrapper(wrapper, wrapper.text("uid"))
+                }.getOrNull()
+            }
+        }.getOrDefault(emptyList())
+    }
+
+    private fun parseTrackWrapper(wrapper: JsonObject, uid: String? = null): SpotifyLibraryTrack? {
+        val data = wrapper["data"] as? JsonObject ?: return null
+        val uri = wrapper.text("_uri") ?: wrapper.text("uri") ?: data.text("uri") ?: return null
+        val name = data.text("name") ?: return null
+        val artistsObj = data["artists"] as? JsonObject
+        val artistItems = artistsObj?.get("items") as? JsonArray
+        val artists = artistItems.orEmpty().mapNotNull { item ->
+            val artist = item as? JsonObject ?: return@mapNotNull null
+            val profile = artist["profile"] as? JsonObject
+            profile?.text("name") ?: artist.text("name")
+        }.joinToString(", ")
+        val album = data["albumOfTrack"] as? JsonObject ?: data["album"] as? JsonObject
+        val albumName = album?.text("name")
+        val coverArt = data["coverArt"] as? JsonObject
+        val sources = coverArt?.get("sources") as? JsonArray
+        val imageUrl = (sources?.firstOrNull() as? JsonObject)?.text("url")
+        return SpotifyLibraryTrack(uri, name, artists, albumName, imageUrl, uid)
+    }
 
     /** Parses the cached Spotify home feed for the Home screen without any network access. */
     fun parseHomeSections(snapshot: String?): List<SpotifyHomeSection> {
