@@ -19,6 +19,8 @@ import com.maxrave.common.AppIdentity
 import com.maxrave.data.di.loader.loadAllModules
 import com.maxrave.domain.manager.DataStoreManager
 import com.maxrave.logger.Logger
+import com.maxrave.common.QUALITY
+import com.maxrave.simpmusic.spotify.SpotifyLibrarySyncService
 import com.maxrave.simpmusic.di.viewModelModule
 import com.maxrave.simpmusic.service.backup.AutoBackupScheduler
 import com.maxrave.simpmusic.utils.NetworkFirstInterceptor
@@ -27,6 +29,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.flow.first
 import multiplatform.network.cmptoast.AppContext
 import okhttp3.OkHttpClient
 import okio.FileSystem
@@ -74,6 +77,12 @@ class SimpMusicApplication :
         // restore a queue in the background. This is intentionally synchronous and tiny.
         runBlocking {
             dataStoreManager.setWatchVideoInsteadOfPlayingAudio(false)
+            val dataSaverEnabled =
+                dataStoreManager.getString(SpotifyLibrarySyncService.DATA_SAVER_KEY).first()
+                    ?.toBooleanStrictOrNull() ?: true
+            if (dataSaverEnabled) {
+                dataStoreManager.setQuality(QUALITY.items[0].toString())
+            }
         }
 
         // provide custom configuration
