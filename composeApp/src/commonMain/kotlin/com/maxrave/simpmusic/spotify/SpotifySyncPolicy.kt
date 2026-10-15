@@ -14,7 +14,7 @@ object SpotifySyncPolicy {
     /** Home feed changes more often than a saved library, but should not be polled constantly. */
     const val DEFAULT_HOME_REFRESH_INTERVAL_MS: Long = 60 * 60 * 1000L
 
-    /** Never schedule a refresh while the user has enabled data saver. */
+    /** Data saver blocks repeat refreshes; initial sync and manual refreshes remain available. */
     fun shouldRefresh(
         lastSuccessfulSyncMs: Long?,
         nowMs: Long,
