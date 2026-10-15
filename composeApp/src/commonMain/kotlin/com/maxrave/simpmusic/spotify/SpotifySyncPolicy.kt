@@ -14,6 +14,9 @@ object SpotifySyncPolicy {
     /** Home feed changes more often than a saved library, but should not be polled constantly. */
     const val DEFAULT_HOME_REFRESH_INTERVAL_MS: Long = 60 * 60 * 1000L
 
+    /** Back off a failed first sync in data-saver mode so each app launch doesn't repeat it. */
+    const val INITIAL_SYNC_RETRY_BACKOFF_MS: Long = 15 * 60 * 1000L
+
     /** Data saver blocks repeat refreshes; initial sync and manual refreshes remain available. */
     fun shouldRefresh(
         lastSuccessfulSyncMs: Long?,
@@ -21,11 +24,18 @@ object SpotifySyncPolicy {
         intervalMs: Long,
         dataSaverEnabled: Boolean,
         forceRefresh: Boolean = false,
+        lastAttemptMs: Long? = null,
     ): Boolean {
         if (forceRefresh) return true
-        // First sync is required to seed the local cache. Data saver blocks repeat refreshes,
-        // not the initial fetch needed to make local-first mode useful.
-        if (lastSuccessfulSyncMs == null || lastSuccessfulSyncMs <= 0L) return true
+        // First sync is required to seed the local cache. If it failed recently, however,
+        // data-saver mode should not repeat the same network requests on every app launch.
+        if (lastSuccessfulSyncMs == null || lastSuccessfulSyncMs <= 0L) {
+            if (dataSaverEnabled && lastAttemptMs != null && lastAttemptMs > 0L) {
+                if (nowMs < lastAttemptMs) return false
+                if (nowMs - lastAttemptMs < INITIAL_SYNC_RETRY_BACKOFF_MS) return false
+            }
+            return true
+        }
         if (dataSaverEnabled) return false
         if (intervalMs <= 0L) return true
         if (nowMs < lastSuccessfulSyncMs) return false
