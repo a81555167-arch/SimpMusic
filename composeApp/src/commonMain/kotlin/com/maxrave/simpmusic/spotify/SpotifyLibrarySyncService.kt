@@ -521,7 +521,15 @@ class SpotifyLibrarySyncService(
             val items = when (operation) {
                 "libraryV3" -> container["items"]?.jsonArray.orEmpty().mapNotNull { it.jsonObject["item"] }
                 "fetchLibraryTracks" -> container["items"]?.jsonArray.orEmpty()
-                else -> container["items"]?.jsonArray.orEmpty().mapNotNull { it.jsonObject["itemV2"] }
+                else -> container["items"]?.jsonArray.orEmpty().mapNotNull { element ->
+                    val entry = element as? JsonObject ?: return@mapNotNull null
+                    val item = entry["itemV2"] as? JsonObject ?: return@mapNotNull null
+                    buildJsonObject {
+                        item.forEach { (key, value) -> put(key, value) }
+                        val uid = entry["uid"] ?: item["uid"]
+                        if (uid != null) put("uid", uid)
+                    }
+                }
             }
             val total = container["totalCount"]?.jsonPrimitive?.intOrNull
             if (expectedTotal == null) expectedTotal = total
