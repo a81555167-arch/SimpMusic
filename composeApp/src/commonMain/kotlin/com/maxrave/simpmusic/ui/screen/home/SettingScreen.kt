@@ -1052,6 +1052,12 @@ fun SettingScreen(
                     },
                 )
                 SettingItem(
+                    title = stringResource(Res.string.spotify_data_saver),
+                    subtitle = stringResource(Res.string.spotify_data_saver_description),
+                    smallSubtitle = true,
+                    switch = (spotifyDataSaverEnabled to { viewModel.setSpotifyDataSaverEnabled(it) }),
+                )
+                SettingItem(
                     title = stringResource(Res.string.quality),
                     subtitle = quality ?: "",
                     smallSubtitle = true,
@@ -1983,12 +1989,6 @@ fun SettingScreen(
                             navController.navigate(SpotifyLoginDestination)
                         }
                     },
-                )
-                SettingItem(
-                    title = stringResource(Res.string.spotify_data_saver),
-                    subtitle = stringResource(Res.string.spotify_data_saver_description),
-                    smallSubtitle = true,
-                    switch = (spotifyDataSaverEnabled to { viewModel.setSpotifyDataSaverEnabled(it) }),
                 )
                 SettingItem(
                     title = stringResource(Res.string.enable_spotify_lyrics),
