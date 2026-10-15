@@ -107,6 +107,7 @@ import com.maxrave.simpmusic.ui.screen.player.content.toAudioQualityLabel
 import com.maxrave.simpmusic.viewModel.LyricsProvider
 import com.maxrave.simpmusic.viewModel.NowPlayingBottomSheetUIEvent
 import com.maxrave.simpmusic.viewModel.NowPlayingBottomSheetViewModel
+import com.maxrave.simpmusic.spotify.SpotifyLibrarySyncService
 import com.maxrave.simpmusic.viewModel.SharedViewModel
 import com.maxrave.simpmusic.viewModel.UIEvent
 import kotlinx.coroutines.delay
@@ -413,6 +414,7 @@ fun NowPlayingScreenContent(
     }
     var showPlaylistSourcePicker by rememberSaveable { mutableStateOf(false) }
     var showSpotifyAddToPlaylist by rememberSaveable { mutableStateOf(false) }
+    val spotifySyncService: SpotifyLibrarySyncService = koinInject()
 
     var shouldShowToolbar by remember {
         mutableStateOf(false)
@@ -886,6 +888,7 @@ fun NowPlayingScreenContent(
             songTitle = song?.title.orEmpty(),
             artists = song?.artistName.orEmpty().joinToString(", "),
             onDismiss = { showSpotifyAddToPlaylist = false },
+            service = spotifySyncService,
         )
     }
 
