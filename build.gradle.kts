@@ -40,7 +40,7 @@ val patchAudioOnlyCore = tasks.register("patchAudioOnlyCore") {
         val original = sourceFile.readText()
         val guardMarker = "// Audio-only build guard for legacy video queue items."
         if (!original.contains(guardMarker)) {
-            val anchor = "        val getVideo = runBlocking(Dispatchers.IO) { dataStoreManager.watchVideoInsteadOfPlayingAudio.first() } == DataStoreManager.Values.TRUE\\n"
+            val anchor = "        val getVideo = runBlocking(Dispatchers.IO) { dataStoreManager.watchVideoInsteadOfPlayingAudio.first() } == DataStoreManager.Values.TRUE\n"
             if (!original.contains(anchor)) {
                 throw GradleException(
                     "The core media-source factory changed; refusing to build without verifying the audio-only patch.",
