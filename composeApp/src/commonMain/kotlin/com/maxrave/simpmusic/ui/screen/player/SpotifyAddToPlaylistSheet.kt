@@ -53,8 +53,12 @@ fun SpotifyAddToPlaylistSheet(
         if (service.isLoggedIn()) {
             service.syncLibrary(dataSaverEnabled = service.isDataSaverEnabled())
                 .onSuccess { library = service.parseLibrarySnapshot(it) }
-                .onFailure { message = it.message }
+                .onFailure {
+                    messageIsError = true
+                    message = it.message
+                }
         } else {
+            messageIsError = true
             message = "Log in to Spotify in Settings first."
         }
     }
