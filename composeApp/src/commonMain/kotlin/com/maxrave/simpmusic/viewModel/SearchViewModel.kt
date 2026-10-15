@@ -238,7 +238,6 @@ class SearchViewModel(
         _searchScreenUIState.value = SearchScreenUIState.Loading
         viewModelScope.launch {
             var song = ArrayList<SongsResult>()
-            val video = ArrayList<VideosResult>()
             var album = ArrayList<AlbumsResult>()
             var artist = ArrayList<ArtistsResult>()
             var playlist = ArrayList<PlaylistsResult>()
@@ -284,15 +283,6 @@ class SearchViewModel(
                         }
                     }
                 }
-            val job5 =
-                launch {
-                    searchRepository.getSearchDataVideo(query).collect { values ->
-                        when (values) {
-                            is Resource.Success -> values.data?.let { video.addAll(it) }
-                            is Resource.Error -> {}
-                        }
-                    }
-                }
             val job6 =
                 launch {
                     searchRepository.getSearchDataFeaturedPlaylist(query).collect { values ->
@@ -315,7 +305,6 @@ class SearchViewModel(
             job2.join()
             job3.join()
             job4.join()
-            job5.join()
             job6.join()
             job7.join()
 
@@ -325,7 +314,6 @@ class SearchViewModel(
                         temp += artist[i]
                     }
                     temp.addAll(song)
-                    temp.addAll(video)
                     temp.addAll(album)
                     temp.addAll(playlist)
                     temp.addAll(featuredPlaylist)
@@ -348,7 +336,7 @@ class SearchViewModel(
                         searchArtistsResult = artist,
                         searchAlbumsResult = album,
                         searchPlaylistsResult = playlist,
-                        searchVideosResult = video,
+                        searchVideosResult = emptyList(),
                         searchFeaturedPlaylistsResult = featuredPlaylist,
                         searchPodcastsResult = podcast,
                     )
