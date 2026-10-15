@@ -321,7 +321,6 @@ class SearchViewModel(
                 } else {
                     temp.addAll(artist)
                     temp.addAll(song)
-                    temp.addAll(video)
                     temp.addAll(album)
                     temp.addAll(playlist)
                     temp.addAll(featuredPlaylist)
