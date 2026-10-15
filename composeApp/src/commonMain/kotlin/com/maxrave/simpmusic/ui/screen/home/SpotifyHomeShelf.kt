@@ -37,6 +37,7 @@ fun SpotifyHomeShelf(
     sections: List<SpotifyHomeSection>,
     isRefreshing: Boolean,
     onRefresh: () -> Unit,
+    errorMessage: String? = null,
     searchViewModel: SearchViewModel,
     navController: NavController,
     modifier: Modifier = Modifier,
@@ -58,6 +59,13 @@ fun SpotifyHomeShelf(
                     Text("Refresh")
                 }
             }
+        }
+        errorMessage?.let {
+            Text(
+                text = it,
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall,
+            )
         }
         sections.forEach { section ->
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
