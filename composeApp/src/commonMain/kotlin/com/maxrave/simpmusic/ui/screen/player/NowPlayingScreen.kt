@@ -20,6 +20,7 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.size
@@ -27,9 +28,12 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -407,6 +411,8 @@ fun NowPlayingScreenContent(
     var showAddToPlaylistDirectly by rememberSaveable {
         mutableStateOf(false)
     }
+    var showPlaylistSourcePicker by rememberSaveable { mutableStateOf(false) }
+    var showSpotifyAddToPlaylist by rememberSaveable { mutableStateOf(false) }
 
     var shouldShowToolbar by remember {
         mutableStateOf(false)
@@ -685,7 +691,7 @@ fun NowPlayingScreenContent(
             onShowMoreSheet = { showSheet = true },
             onShowQueue = { showQueueBottomSheet = true },
             onShowInfo = { showInfoBottomSheet = true },
-            onShowAddToPlaylist = { showAddToPlaylistDirectly = true },
+            onShowAddToPlaylist = { showPlaylistSourcePicker = true },
             onShowFullscreenLyrics = { showFullscreenLyrics = true },
             onShowVoteDialog = { showVoteDialog = true },
             onLyricsOffsetChange = { sharedViewModel.setLyricsOffsetMs(it) },
@@ -847,6 +853,39 @@ fun NowPlayingScreenContent(
             onDismiss = {
                 showInfoBottomSheet = false
             },
+        )
+    }
+
+    if (showPlaylistSourcePicker) {
+        AlertDialog(
+            onDismissRequest = { showPlaylistSourcePicker = false },
+            title = { Text("Add to playlist") },
+            text = {
+                Column {
+                    TextButton(
+                        onClick = {
+                            showPlaylistSourcePicker = false
+                            showAddToPlaylistDirectly = true
+                        },
+                    ) { Text("SimpMusic / YouTube Music playlists") }
+                    TextButton(
+                        onClick = {
+                            showPlaylistSourcePicker = false
+                            showSpotifyAddToPlaylist = true
+                        },
+                    ) { Text("Spotify playlists") }
+                }
+            },
+            confirmButton = {},
+        )
+    }
+
+    if (showSpotifyAddToPlaylist) {
+        val song = sharedViewModel.nowPlayingState.value?.songEntity
+        SpotifyAddToPlaylistSheet(
+            songTitle = song?.title.orEmpty(),
+            artists = song?.artistName.orEmpty().joinToString(", "),
+            onDismiss = { showSpotifyAddToPlaylist = false },
         )
     }
 
