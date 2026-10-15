@@ -44,6 +44,7 @@ fun SpotifyAddToPlaylistSheet(
     val coroutineScope = rememberCoroutineScope()
     var library by remember { mutableStateOf(SpotifyLibrarySnapshot(emptyList(), emptyList())) }
     var addingPlaylistId by remember { mutableStateOf<String?>(null) }
+    var likingTrack by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
@@ -68,6 +69,39 @@ fun SpotifyAddToPlaylistSheet(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Liked Songs", style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        "Save this track to your Spotify account",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                if (likingTrack) {
+                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                } else {
+                    TextButton(
+                        onClick = {
+                            coroutineScope.launch {
+                                likingTrack = true
+                                message = null
+                                service.setLikedByMetadata(songTitle, artists, true)
+                                    .onSuccess {
+                                        message = "Added to Spotify Liked Songs."
+                                        service.cachedLibraryJson()?.let { library = service.parseLibrarySnapshot(it) }
+                                    }
+                                    .onFailure { message = it.message ?: "Could not add this track to Spotify Liked Songs." }
+                                likingTrack = false
+                            }
+                        },
+                        enabled = !likingTrack && addingPlaylistId == null,
+                    ) { Text("Like") }
+                }
+            }
             message?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
             LazyColumn(
                 modifier = Modifier.fillMaxWidth(),
