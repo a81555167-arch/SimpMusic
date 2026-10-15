@@ -336,16 +336,101 @@ class SpotifyLibrarySyncService(
         snapshot
     }
 
-    suspend fun setLiked(trackUri: String, liked: Boolean): Result<Unit> = runCatching {
+    suspend fun setLiked(
+        trackUri: String,
+        liked: Boolean,
+        trackWrapper: JsonObject? = null,
+    ): Result<Unit> = runCatching {
         require(trackUri.startsWith("spotify:track:")) { "Expected a Spotify track URI" }
         val token = accessToken()
         val variables = buildJsonObject {
             putJsonArray("libraryItemUris") { add(trackUri) }
         }
         graphql(token, if (liked) "addToLibrary" else "removeFromLibrary", HASH_LIBRARY_MUTATION, variables)
-        syncLibrary(dataSaverEnabled = false, forceRefresh = true).getOrThrow()
+        patchLikedCache(trackUri, liked, trackWrapper)
         Unit
     }
+
+    /**
+     * Finds an exact title + artist match in Spotify's own search results. The caller can use the
+     * returned wrapper for a mutation and local cache patch; no guessed first-result mapping.
+     */
+    suspend fun findTrackWrapper(title: String, artists: String): Result<JsonObject?> = runCatching {
+        require(title.isNotBlank()) { "Track title cannot be blank" }
+        val token = accessToken()
+        val variables = buildJsonObject {
+            put("searchTerm", listOf(title, artists).filter { it.isNotBlank() }.joinToString(" "))
+            put("offset", 0)
+            put("limit", 10)
+            put("numberOfTopResults", 5)
+            put("includeAudiobooks", false)
+            put("includeArtistHasConcertsField", false)
+            put("includePreReleases", false)
+            put("includeLocalConcertsField", false)
+            put("includeAuthors", false)
+        }
+        val response = graphql(token, "searchDesktop", HASH_SEARCH, variables)
+        val search = response["data"]?.jsonObject?.get("searchV2") as? JsonObject
+            ?: error("Spotify search response did not contain searchV2")
+        val items = ((search["tracksV2"] as? JsonObject)?.get("items") as? JsonArray).orEmpty()
+        val expectedTitle = normalize(title)
+        val expectedArtists = artists.split(",", "&", " feat. ", " ft. ")
+            .map(::normalize).filter { it.isNotBlank() }
+        items.firstNotNullOfOrNull { element ->
+            val item = element as? JsonObject ?: return@firstNotNullOfOrNull null
+            val wrapper = item["item"] as? JsonObject ?: return@firstNotNullOfOrNull null
+            val data = wrapper["data"] as? JsonObject ?: return@firstNotNullOfOrNull null
+            if (normalize(data.text("name").orEmpty()) != expectedTitle) return@firstNotNullOfOrNull null
+            val artistItems = (((data["artists"] as? JsonObject)?.get("items") as? JsonArray).orEmpty())
+            val foundArtists = artistItems.mapNotNull { artistElement ->
+                val artist = artistElement as? JsonObject ?: return@mapNotNull null
+                (artist["profile"] as? JsonObject)?.text("name") ?: artist.text("name")
+            }.map(::normalize)
+            if (expectedArtists.isNotEmpty() && foundArtists.none { found -> expectedArtists.any { expected -> expected == found || expected.contains(found) || found.contains(expected) } }) {
+                return@firstNotNullOfOrNull null
+            }
+            val uri = wrapper.text("_uri") ?: wrapper.text("uri") ?: return@firstNotNullOfOrNull null
+            if (!uri.startsWith("spotify:track:")) return@firstNotNullOfOrNull null
+            wrapper
+        }
+    }
+
+    suspend fun addTrackToPlaylistByMetadata(
+        playlistId: String,
+        title: String,
+        artists: String,
+    ): Result<Unit> = runCatching {
+        val wrapper = findTrackWrapper(title, artists).getOrThrow()
+            ?: error("Spotify could not find an exact title and artist match.")
+        val uri = wrapper.text("_uri") ?: wrapper.text("uri") ?: error("Spotify search result has no track URI")
+        addTracksToPlaylist(playlistId, listOf(uri)).getOrThrow()
+        Unit
+    }
+
+    private suspend fun patchLikedCache(trackUri: String, liked: Boolean, trackWrapper: JsonObject?) {
+        val raw = cachedLibraryJson() ?: return
+        if (raw.isBlank()) return
+        val root = json.parseToJsonElement(raw) as? JsonObject ?: return
+        val tracks = (root["likedTracks"] as? JsonArray).orEmpty()
+        val retained = tracks.filterNot { element ->
+            val entry = element as? JsonObject ?: return@filterNot false
+            val wrapper = entry["track"] as? JsonObject ?: entry
+            (wrapper.text("_uri") ?: wrapper.text("uri")) == trackUri
+        }
+        val updatedTracks = if (liked && trackWrapper != null) {
+            retained + buildJsonObject { put("track", trackWrapper) }
+        } else {
+            retained
+        }
+        val updated = buildJsonObject {
+            root.forEach { (key, value) -> put(key, value) }
+            put("likedTracks", JsonArray(updatedTracks))
+        }
+        dataStoreManager.putString(KEY_LIBRARY_CACHE, updated.toString())
+    }
+
+    private fun normalize(value: String): String =
+        value.lowercase().filter { it.isLetterOrDigit() }
 
     suspend fun addTracksToPlaylist(playlistId: String, trackUris: List<String>): Result<Unit> = runCatching {
         require(playlistId.isNotBlank())
@@ -524,5 +609,6 @@ class SpotifyLibrarySyncService(
         private const val HASH_PLAYLIST_MUTATION = "47b2a1234b17748d332dd0431534f22450e9ecbb3d5ddcdacbd83368636a0990"
         private const val HASH_LIBRARY_MUTATION = "7c5a69420e2bfae3da5cc4e14cbc8bb3f6090f80afc00ffc179177f19be3f33d"
         private const val HASH_HOME = "23e37f2e58d82d567f27080101d36609009d8c3676457b1086cb0acc55b72a5d"
+        private const val HASH_SEARCH = "4801118d4a100f756e833d33984436a3899cff359c532f8fd3aaf174b60b3b49"
     }
 }
