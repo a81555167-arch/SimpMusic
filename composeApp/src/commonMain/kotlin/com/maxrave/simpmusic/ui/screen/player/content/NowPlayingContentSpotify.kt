@@ -420,23 +420,22 @@ fun NowPlayingContentSpotify(
                             if (pageHasCanvas) {
                                 Crossfade(targetState = state.screenData.canvasData?.isVideo) { isVideo ->
                                     if (isVideo == true) {
-                                        state.screenData.canvasData?.url?.let { url ->
-                                            MediaPlayerView(
-                                                url = url,
-                                                modifier =
-                                                    Modifier
-                                                        .fillMaxHeight()
-                                                        .then(
-                                                            if (getPlatform() == Platform.Desktop) {
-                                                                Modifier
-                                                            } else {
-                                                                Modifier
-                                                                    .wrapContentWidth(unbounded = true, align = Alignment.CenterHorizontally)
-                                                                    .align(Alignment.Center)
-                                                            },
-                                                        ),
-                                            )
-                                        }
+                                        // Canvas MP4s are deliberately not streamed in this audio-only build.
+                                        // Use Spotify's still thumbnail instead, so opening Now Playing cannot
+                                        // silently start a second, high-bandwidth video stream.
+                                        AsyncImage(
+                                            model =
+                                                ImageRequest
+                                                    .Builder(LocalPlatformContext.current)
+                                                    .data(state.screenData.canvasData?.canvasThumbUrl ?: state.screenData.thumbnailURL)
+                                                    .diskCachePolicy(CachePolicy.ENABLED)
+                                                    .diskCacheKey(state.screenData.canvasData?.canvasThumbUrl ?: state.screenData.thumbnailURL)
+                                                    .crossfade(550)
+                                                    .build(),
+                                            contentDescription = null,
+                                            contentScale = ContentScale.Crop,
+                                            modifier = Modifier.fillMaxSize(),
+                                        )
                                     } else if (isVideo == false) {
                                         AsyncImage(
                                             model =
