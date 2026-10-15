@@ -23,9 +23,11 @@ object SpotifySyncPolicy {
         forceRefresh: Boolean = false,
     ): Boolean {
         if (forceRefresh) return true
+        // First sync is required to seed the local cache. Data saver blocks repeat refreshes,
+        // not the initial fetch needed to make local-first mode useful.
+        if (lastSuccessfulSyncMs == null || lastSuccessfulSyncMs <= 0L) return true
         if (dataSaverEnabled) return false
         if (intervalMs <= 0L) return true
-        if (lastSuccessfulSyncMs == null || lastSuccessfulSyncMs <= 0L) return true
         if (nowMs < lastSuccessfulSyncMs) return false
         return nowMs - lastSuccessfulSyncMs >= intervalMs
     }
