@@ -13,6 +13,8 @@ import com.maxrave.domain.manager.DataStoreManager.Values.TRUE
 import com.maxrave.domain.repository.HomeRepository
 import com.maxrave.domain.utils.Resource
 import com.maxrave.logger.Logger
+import com.maxrave.simpmusic.spotify.SpotifyHomeSection
+import com.maxrave.simpmusic.spotify.SpotifyLibrarySyncService
 import com.maxrave.simpmusic.viewModel.base.BaseViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -44,7 +46,14 @@ private data class HomeInputs(
 class HomeViewModel(
     private val dataStoreManager: DataStoreManager,
     private val homeRepository: HomeRepository,
+    private val spotifySyncService: SpotifyLibrarySyncService,
 ) : BaseViewModel() {
+    private val _spotifyHomeSections = MutableStateFlow<List<SpotifyHomeSection>>(emptyList())
+    val spotifyHomeSections: StateFlow<List<SpotifyHomeSection>> = _spotifyHomeSections
+    private val _spotifyHomeRefreshing = MutableStateFlow(false)
+    val spotifyHomeRefreshing: StateFlow<Boolean> = _spotifyHomeRefreshing
+    private val _spotifySyncError = MutableStateFlow<String?>(null)
+    val spotifySyncError: StateFlow<String?> = _spotifySyncError
     private val _homeItemList: MutableStateFlow<List<HomeItem>> =
         MutableStateFlow(arrayListOf())
     val homeItemList: StateFlow<List<HomeItem>> = _homeItemList
@@ -103,6 +112,7 @@ class HomeViewModel(
         }
         homeJob = Job()
         refreshHomeExtras()
+        loadSpotifyHomeFromCacheAndSync()
         viewModelScope.launch {
             regionCodeChart.value = dataStoreManager.chartKey.first()
             exploreChart(regionCodeChart.value ?: "ZZ")
@@ -244,6 +254,47 @@ class HomeViewModel(
                         is Resource.Error -> Logger.w(tag, "New releases refresh failed: ${newRelease.message}")
                     }
                 }
+        }
+    }
+
+    private fun loadSpotifyHomeFromCacheAndSync() {
+        viewModelScope.launch {
+            _spotifyHomeSections.value = spotifySyncService.parseHomeSections(spotifySyncService.cachedHomeJson())
+            if (dataStoreManager.spdc.first().isBlank()) return@launch
+            val dataSaver = spotifySyncService.isDataSaverEnabled()
+            _spotifyHomeRefreshing.value = true
+            spotifySyncService.syncHome(dataSaverEnabled = dataSaver)
+                .onSuccess { snapshot ->
+                    _spotifyHomeSections.value = spotifySyncService.parseHomeSections(snapshot)
+                    _spotifySyncError.value = null
+                }
+                .onFailure { error ->
+                    _spotifySyncError.value = error.message
+                    Logger.w(tag, "Spotify home sync failed: ${error.message}")
+                }
+            // The library sync has its own six-hour clock and cache. Never redownload it
+            // just because the home feed was refreshed.
+            spotifySyncService.syncLibrary(dataSaverEnabled = dataSaver)
+                .onFailure { error -> Logger.w(tag, "Spotify library sync failed: ${error.message}") }
+            _spotifyHomeRefreshing.value = false
+        }
+    }
+
+    /** User-triggered refresh; explicit refresh is allowed even when data saver is enabled. */
+    fun refreshSpotifyHome() {
+        viewModelScope.launch {
+            _spotifyHomeRefreshing.value = true
+            spotifySyncService.syncHome(
+                dataSaverEnabled = spotifySyncService.isDataSaverEnabled(),
+                forceRefresh = true,
+            ).onSuccess { snapshot ->
+                _spotifyHomeSections.value = spotifySyncService.parseHomeSections(snapshot)
+                _spotifySyncError.value = null
+            }.onFailure { error ->
+                _spotifySyncError.value = error.message
+                Logger.w(tag, "Manual Spotify home refresh failed: ${error.message}")
+            }
+            _spotifyHomeRefreshing.value = false
         }
     }
 
