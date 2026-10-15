@@ -141,10 +141,14 @@ class SpotifyLibrarySyncService(
         }
     }
 
-    suspend fun cachedLibraryJson(): String? = dataStoreManager.getString(KEY_LIBRARY_CACHE).first()
-    suspend fun cachedHomeJson(): String? = dataStoreManager.getString(KEY_HOME_CACHE).first()
+    suspend fun cachedLibraryJson(): String? =
+        dataStoreManager.getString(KEY_LIBRARY_CACHE).first()?.takeIf { it.isNotBlank() }
+
+    suspend fun cachedHomeJson(): String? =
+        dataStoreManager.getString(KEY_HOME_CACHE).first()?.takeIf { it.isNotBlank() }
+
     suspend fun cachedPlaylistTracksJson(playlistId: String): String? =
-        dataStoreManager.getString("$KEY_PLAYLIST_CACHE_PREFIX$playlistId").first()
+        dataStoreManager.getString("$KEY_PLAYLIST_CACHE_PREFIX$playlistId").first()?.takeIf { it.isNotBlank() }
 
     /** Parses the persistent library snapshot without making network requests. */
     fun parseLibrarySnapshot(snapshot: String?): SpotifyLibrarySnapshot {
