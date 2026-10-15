@@ -76,7 +76,11 @@ class SimpMusicApplication :
         // Audio-only build invariant: reset any legacy preference before the media service can
         // restore a queue in the background. This is intentionally synchronous and tiny.
         runBlocking {
+            // This build is intentionally audio-only. Clear legacy preferences before any
+            // player/session can read them, including Canvas and animated-cover video flags.
             dataStoreManager.setWatchVideoInsteadOfPlayingAudio(false)
+            dataStoreManager.setSpotifyCanvas(false)
+            dataStoreManager.setAMAnimatedArtwork(false)
             val dataSaverEnabled =
                 dataStoreManager.getString(SpotifyLibrarySyncService.DATA_SAVER_KEY).first()
                     ?.toBooleanStrictOrNull() ?: true
