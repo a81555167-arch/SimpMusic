@@ -1996,20 +1996,9 @@ fun SettingScreen(
                     switch = (spotifyLyrics to { viewModel.setSpotifyLyrics(it) }),
                     isEnable = spotifyLoggedIn,
                 )
-                SettingItem(
-                    title = stringResource(Res.string.enable_canvas),
-                    subtitle = stringResource(Res.string.canvas_info),
-                    switch = (spotifyCanvas to { viewModel.setSpotifyCanvas(it) }),
-                    isEnable = spotifyLoggedIn,
-                )
                 // Sits with the canvas because it replaces it, but carries no isEnable: the two
                 // rows above need a Spotify session and this one needs no account at all, so
                 // gating it on spotifyLoggedIn would lock it away from the users it works for.
-                SettingItem(
-                    title = stringResource(Res.string.enable_animated_artwork),
-                    subtitle = stringResource(Res.string.animated_artwork_info),
-                    switch = (amAnimatedArtwork to { viewModel.setAMAnimatedArtwork(it) }),
-                )
             }
         }
         item(key = "discord") {
@@ -2130,23 +2119,6 @@ fun SettingScreen(
                                     confirm =
                                         runBlocking { getString(Res.string.clear) } to {
                                             viewModel.clearThumbnailCache(platformContext)
-                                        },
-                                    dismiss = runBlocking { getString(Res.string.cancel) },
-                                ),
-                            )
-                        },
-                    )
-                    SettingItem(
-                        title = stringResource(Res.string.spotify_canvas_cache),
-                        subtitle = "${canvasCache.bytesToMB()} MB",
-                        onClick = {
-                            viewModel.setBasicAlertData(
-                                SettingBasicAlertState(
-                                    title = runBlocking { getString(Res.string.clear_canvas_cache) },
-                                    message = null,
-                                    confirm =
-                                        runBlocking { getString(Res.string.clear) } to {
-                                            viewModel.clearCanvasCache()
                                         },
                                     dismiss = runBlocking { getString(Res.string.cancel) },
                                 ),
@@ -2324,21 +2296,6 @@ fun SettingScreen(
                         )
                         Spacer(Modifier.width(8.dp))
                         Text(text = stringResource(Res.string.player_cache), style = typo().bodySmall)
-                    }
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-                    ) {
-                        Box(
-                            Modifier
-                                .size(12.dp)
-                                .clip(CircleShape)
-                                .background(
-                                    Color.Cyan,
-                                ),
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text(text = stringResource(Res.string.spotify_canvas_cache), style = typo().bodySmall)
                     }
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
