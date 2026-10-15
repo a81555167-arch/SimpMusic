@@ -328,10 +328,13 @@ class SharedViewModel(
                             }
                         }
                 }
+            // This build is audio-only by design. Reset legacy preferences so the media
+            // service never selects YouTube video streams, and keep the UI state disabled.
             val checkGetVideoJob =
                 launch {
+                    dataStoreManager.setWatchVideoInsteadOfPlayingAudio(false)
                     dataStoreManager.watchVideoInsteadOfPlayingAudio.collectLatest {
-                        _getVideo.value = it == TRUE
+                        _getVideo.value = false
                     }
                 }
             val lyricsProviderJob =
