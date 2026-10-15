@@ -1693,11 +1693,9 @@ class SettingsViewModel(
 
     fun setSpotifyDataSaverEnabled(enabled: Boolean) {
         viewModelScope.launch {
+            // This switch controls Spotify library/home refreshes only. It must not silently
+            // change YouTube Music playback quality or overwrite the user's audio preference.
             dataStoreManager.putString(SpotifyLibrarySyncService.DATA_SAVER_KEY, enabled.toString())
-            if (enabled) {
-                dataStoreManager.setQuality(QUALITY.items[0].toString())
-                dataStoreManager.setWatchVideoInsteadOfPlayingAudio(false)
-            }
             _spotifyDataSaverEnabled.value = enabled
         }
     }
