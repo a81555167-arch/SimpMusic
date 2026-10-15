@@ -427,9 +427,9 @@ fun NowPlayingContentSpotify(
                                             model =
                                                 ImageRequest
                                                     .Builder(LocalPlatformContext.current)
-                                                    .data(state.screenData.canvasData?.canvasThumbUrl ?: state.screenData.thumbnailURL)
+                                                    .data(state.screenData.canvasData?.thumbUrl ?: state.screenData.thumbnailURL)
                                                     .diskCachePolicy(CachePolicy.ENABLED)
-                                                    .diskCacheKey(state.screenData.canvasData?.canvasThumbUrl ?: state.screenData.thumbnailURL)
+                                                    .diskCacheKey(state.screenData.canvasData?.thumbUrl ?: state.screenData.thumbnailURL)
                                                     .crossfade(550)
                                                     .build(),
                                             contentDescription = null,
