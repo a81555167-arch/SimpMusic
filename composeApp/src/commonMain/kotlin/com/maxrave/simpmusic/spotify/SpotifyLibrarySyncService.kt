@@ -29,6 +29,19 @@ import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
 import kotlin.time.Clock
 
+data class SpotifyHomeCard(
+    val title: String,
+    val uri: String,
+    val imageUrl: String?,
+    val subtitle: String?,
+    val openUrl: String?,
+)
+
+data class SpotifyHomeSection(
+    val title: String,
+    val cards: List<SpotifyHomeCard>,
+)
+
 /**
  * Local-first Spotify library synchronizer. Spotify's web-player GraphQL API is undocumented
  * and its persisted-query hashes rotate. Raw JSON is cached to preserve data across schema changes.
@@ -45,6 +58,72 @@ class SpotifyLibrarySyncService(
     suspend fun cachedHomeJson(): String? = dataStoreManager.getString(KEY_HOME_CACHE).first()
     suspend fun cachedPlaylistTracksJson(playlistId: String): String? =
         dataStoreManager.getString("$KEY_PLAYLIST_CACHE_PREFIX$playlistId").first()
+
+    /** Parses the cached Spotify home feed for the Home screen without any network access. */
+    fun parseHomeSections(snapshot: String?): List<SpotifyHomeSection> {
+        if (snapshot.isNullOrBlank()) return emptyList()
+        return runCatching {
+            val root = json.parseToJsonElement(snapshot).jsonObject
+            val feed = root["feed"]?.jsonObject ?: return emptyList()
+            val sections = feed["sectionContainer"]?.jsonObject
+                ?.get("sections")?.jsonObject?.get("items")?.jsonArray.orEmpty()
+            sections.mapNotNull { sectionElement ->
+                val section = sectionElement.jsonObject
+                val sectionData = section["data"]?.jsonObject
+                val titleData = sectionData?.get("title")?.jsonObject
+                val title = titleData?.text("transformedLabel")
+                    ?: titleData?.text("translatedBaseText")
+                    ?: titleData?.text("text")
+                    ?: return@mapNotNull null
+                val itemElements = section["sectionItems"]?.jsonObject
+                    ?.get("items")?.jsonArray.orEmpty()
+                val cards = itemElements.mapNotNull { itemElement ->
+                    val content = itemElement.jsonObject["content"]?.jsonObject ?: return@mapNotNull null
+                    val data = content["data"]?.jsonObject ?: return@mapNotNull null
+                    val uri = data.text("uri") ?: data.text("id")?.let { id ->
+                        when (content.text("__typename")) {
+                            "PlaylistResponseWrapper" -> "spotify:playlist:$id"
+                            "AlbumResponseWrapper" -> "spotify:album:$id"
+                            "ArtistResponseWrapper" -> "spotify:artist:$id"
+                            else -> null
+                        }
+                    } ?: return@mapNotNull null
+                    val name = data.text("name")
+                        ?: data["profile"]?.jsonObject?.text("name")
+                        ?: data["title"]?.jsonObject?.text("text")
+                        ?: return@mapNotNull null
+                    val images = data["coverArt"]?.jsonObject?.get("sources")?.jsonArray
+                        ?: data["visuals"]?.jsonObject?.get("avatarImage")?.jsonObject?.get("sources")?.jsonArray
+                        ?: data["images"]?.jsonObject?.get("items")?.jsonArray?.firstOrNull()
+                            ?.jsonObject?.get("sources")?.jsonArray
+                    val imageUrl = images?.firstOrNull()?.jsonObject?.text("url")
+                    val subtitle = data["description"]?.jsonPrimitive?.contentOrNull
+                        ?: data["profile"]?.jsonObject?.text("name")
+                    SpotifyHomeCard(
+                        title = name,
+                        uri = uri,
+                        imageUrl = imageUrl,
+                        subtitle = subtitle,
+                        openUrl = uriToWebUrl(uri),
+                    )
+                }
+                if (cards.isEmpty()) null else SpotifyHomeSection(title, cards)
+            }
+        }.getOrDefault(emptyList())
+    }
+
+    private fun JsonObject.text(key: String): String? =
+        this[key]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
+
+    private fun uriToWebUrl(uri: String): String? {
+        val parts = uri.split(":")
+        if (parts.size < 3 || parts[0] != "spotify") return null
+        return when (parts[1]) {
+            "playlist", "album", "artist", "track", "show", "episode" ->
+                "https://open.spotify.com/${parts[1]}/${parts.last()}"
+            else -> null
+        }
+    }
 
     suspend fun syncLibrary(
         dataSaverEnabled: Boolean = false,
