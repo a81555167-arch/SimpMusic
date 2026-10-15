@@ -112,6 +112,17 @@ class SpotifyLibrarySyncService(
             homeMutex.withLock {
                 playlistMutex.withLock {
                     tokenMutex.withLock {
+                        val cachedPlaylistIds = runCatching {
+                            dataStoreManager.getString(KEY_PLAYLIST_CACHE_IDS).first()
+                                ?.takeIf { it.isNotBlank() }
+                                ?.let { json.parseToJsonElement(it).jsonArray.mapNotNull { value -> value.jsonPrimitive.contentOrNull } }
+                                .orEmpty()
+                        }.getOrDefault(emptyList())
+                        cachedPlaylistIds.forEach { playlistId ->
+                            dataStoreManager.putString("$KEY_PLAYLIST_CACHE_PREFIX$playlistId", "")
+                            dataStoreManager.putString("$KEY_PLAYLIST_TIME_PREFIX$playlistId", "0")
+                        }
+                        dataStoreManager.putString(KEY_PLAYLIST_CACHE_IDS, "")
                         dataStoreManager.putString(KEY_LIBRARY_CACHE, "")
                         dataStoreManager.putString(KEY_HOME_CACHE, "")
                         dataStoreManager.putString(KEY_LIBRARY_SYNC_TIME, "0")
@@ -370,6 +381,13 @@ class SpotifyLibrarySyncService(
         }.toString()
         dataStoreManager.putString(cacheKey, snapshot)
         dataStoreManager.putString(timeKey, now.toString())
+        val cachedIds = runCatching {
+            dataStoreManager.getString(KEY_PLAYLIST_CACHE_IDS).first()
+                ?.takeIf { it.isNotBlank() }
+                ?.let { json.parseToJsonElement(it).jsonArray.mapNotNull { value -> value.jsonPrimitive.contentOrNull } }
+                .orEmpty()
+        }.getOrDefault(emptyList())
+        dataStoreManager.putString(KEY_PLAYLIST_CACHE_IDS, JsonArray((cachedIds + playlistId).distinct().map { kotlinx.serialization.json.JsonPrimitive(it) }).toString())
         snapshot
         }
     }
@@ -739,6 +757,7 @@ class SpotifyLibrarySyncService(
         private const val KEY_HOME_SYNC_TIME = "spotify_sync_home_success_ms_v1"
         private const val KEY_PLAYLIST_CACHE_PREFIX = "spotify_sync_playlist_json_v1_"
         private const val KEY_PLAYLIST_TIME_PREFIX = "spotify_sync_playlist_success_ms_v1_"
+        private const val KEY_PLAYLIST_CACHE_IDS = "spotify_sync_playlist_cache_ids_v1"
         private const val HASH_LIBRARY_V3 = "390c78e5b951029bad359785e69b07b536a509c581cbcd0aded5e5067f187455"
         private const val HASH_FETCH_PLAYLIST = "8964e8eafb21aa992a7d951d256d83285c04be2105d209262901de70cb97584a"
         private const val HASH_LIBRARY_TRACKS = "087278b20b743578a6262c2b0b4bcd20d879c503cc359a2285baf083ef944240"
