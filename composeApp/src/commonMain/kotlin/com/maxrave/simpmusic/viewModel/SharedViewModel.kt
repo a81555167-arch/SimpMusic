@@ -78,6 +78,7 @@ import com.maxrave.simpmusic.utils.VersionManager
 import com.maxrave.simpmusic.utils.decodePromos
 import com.maxrave.simpmusic.utils.shownPromoIds
 import com.maxrave.simpmusic.utils.withShownPromo
+import com.maxrave.simpmusic.spotify.SpotifyLibrarySyncService
 import com.maxrave.simpmusic.viewModel.base.BaseViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -139,6 +140,7 @@ class SharedViewModel(
     private val playlistRepository: PlaylistRepository,
     private val lyricsCanvasRepository: LyricsCanvasRepository,
     private val cacheRepository: CacheRepository,
+    private val spotifySyncService: SpotifyLibrarySyncService,
 ) : BaseViewModel() {
     var isFirstLiked: Boolean = false
     var isFirstMiniplayer: Boolean = false
@@ -1042,7 +1044,19 @@ class SharedViewModel(
 
                 UIEvent.ToggleLike -> {
                     Logger.w(tag, "ToggleLike")
+                    val currentSong = _nowPlayingState.value?.songEntity
+                    val shouldLikeOnSpotify = _likeStatus.value != YouTubeLikeStatus.LIKE
                     mediaPlayerHandler.onPlayerEvent(PlayerEvent.ToggleLike)
+                    if (currentSong != null && dataStoreManager.spdc.first().isNotBlank()) {
+                        val artistNames = currentSong.artistName.orEmpty().joinToString(", ")
+                        spotifySyncService.setLikedByMetadata(
+                            title = currentSong.title,
+                            artists = artistNames,
+                            liked = shouldLikeOnSpotify,
+                        ).onFailure { error ->
+                            Logger.w(tag, "Spotify like sync skipped/failed: ${error.message}")
+                        }
+                    }
                 }
 
                 is UIEvent.UpdateVolume -> {
