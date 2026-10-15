@@ -27,7 +27,7 @@ plugins {
 // The core submodule is upstream-owned, so keep the small audio-only compatibility patch here
 // instead of pretending the submodule itself was forked. Legacy queues can retain "Video"-prefixed
 // media IDs; Media3's resolver interprets that prefix as a request for a video stream even when the
-// video UI is disabled. Strip it from the media source's local copy before the resolver runs.
+// video UI is disabled. Strip the video prefix from the media source cache key before the resolver runs.
 val patchAudioOnlyCore = tasks.register("patchAudioOnlyCore") {
     doLast {
         val sourceFile = rootProject.file(
@@ -51,7 +51,6 @@ val patchAudioOnlyCore = tasks.register("patchAudioOnlyCore") {
         if (!getVideo && mediaItem.mediaId.startsWith(MERGING_DATA_TYPE.VIDEO)) {
             val audioOnlyId = mediaItem.mediaId.removePrefix(MERGING_DATA_TYPE.VIDEO)
             val audioOnlyItem = mediaItem.buildUpon()
-                .setMediaId(audioOnlyId)
                 .setCustomCacheKey(audioOnlyId)
                 .build()
             return defaultMediaSourceFactory.createMediaSource(audioOnlyItem)
