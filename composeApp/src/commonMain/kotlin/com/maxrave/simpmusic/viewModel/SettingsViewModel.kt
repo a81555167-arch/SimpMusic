@@ -1694,6 +1694,10 @@ class SettingsViewModel(
     fun setSpotifyDataSaverEnabled(enabled: Boolean) {
         viewModelScope.launch {
             dataStoreManager.putString(SpotifyLibrarySyncService.DATA_SAVER_KEY, enabled.toString())
+            if (enabled) {
+                dataStoreManager.setQuality(QUALITY.items[0].toString())
+                dataStoreManager.setWatchVideoInsteadOfPlayingAudio(false)
+            }
             _spotifyDataSaverEnabled.value = enabled
         }
     }
