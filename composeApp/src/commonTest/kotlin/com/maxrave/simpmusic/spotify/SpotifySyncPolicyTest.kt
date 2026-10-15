@@ -43,6 +43,32 @@ class SpotifySyncPolicyTest {
     }
 
     @Test
+    fun dataSaverBacksOffAfterFailedInitialAttempt() {
+        assertFalse(
+            SpotifySyncPolicy.shouldRefresh(
+                lastSuccessfulSyncMs = null,
+                nowMs = 20_000L,
+                intervalMs = 60_000L,
+                dataSaverEnabled = true,
+                lastAttemptMs = 10_000L,
+            ),
+        )
+    }
+
+    @Test
+    fun dataSaverRetriesInitialAttemptAfterBackoff() {
+        assertTrue(
+            SpotifySyncPolicy.shouldRefresh(
+                lastSuccessfulSyncMs = null,
+                nowMs = SpotifySyncPolicy.INITIAL_SYNC_RETRY_BACKOFF_MS + 10_000L,
+                intervalMs = 60_000L,
+                dataSaverEnabled = true,
+                lastAttemptMs = 10_000L,
+            ),
+        )
+    }
+
+    @Test
     fun recentSyncDoesNotRefreshBeforeInterval() {
         assertFalse(
             SpotifySyncPolicy.shouldRefresh(
