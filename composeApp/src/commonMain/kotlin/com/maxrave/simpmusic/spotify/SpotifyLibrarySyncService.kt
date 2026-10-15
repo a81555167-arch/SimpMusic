@@ -32,6 +32,7 @@ import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
 import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
 
 data class SpotifyLibraryPlaylist(
     val id: String,
@@ -73,6 +74,7 @@ data class SpotifyHomeSection(
  * and its persisted-query hashes rotate. Raw JSON is cached to preserve data across schema changes.
  * Failed reads never replace the last good cache or advance the successful-sync timestamp.
  */
+@OptIn(ExperimentalTime::class)
 class SpotifyLibrarySyncService(
     private val dataStoreManager: DataStoreManager,
 ) {
