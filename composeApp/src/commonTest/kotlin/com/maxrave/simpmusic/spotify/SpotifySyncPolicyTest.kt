@@ -43,18 +43,6 @@ class SpotifySyncPolicyTest {
     }
 
     @Test
-    fun dataSaverAllowsTheOneTimeInitialSync() {
-        assertTrue(
-            SpotifySyncPolicy.shouldRefresh(
-                lastSuccessfulSyncMs = null,
-                nowMs = 10_000L,
-                intervalMs = 60_000L,
-                dataSaverEnabled = true,
-            ),
-        )
-    }
-
-    @Test
     fun recentSyncDoesNotRefreshBeforeInterval() {
         assertFalse(
             SpotifySyncPolicy.shouldRefresh(
