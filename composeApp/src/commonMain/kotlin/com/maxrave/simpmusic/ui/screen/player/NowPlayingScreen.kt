@@ -20,6 +20,7 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.size
@@ -27,9 +28,12 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -91,7 +95,6 @@ import com.maxrave.simpmusic.ui.icon.KeyboardArrowDown
 import com.maxrave.simpmusic.ui.icon.SimpIcons
 import com.maxrave.simpmusic.ui.navigation.destination.home.ListenTogetherDestination
 import com.maxrave.simpmusic.ui.navigation.destination.list.ArtistDestination
-import com.maxrave.simpmusic.ui.navigation.destination.player.FullscreenDestination
 import com.maxrave.simpmusic.ui.screen.player.content.NowPlayingContentActions
 import com.maxrave.simpmusic.ui.screen.player.content.NowPlayingContentAppleMusic
 import com.maxrave.simpmusic.ui.screen.player.content.NowPlayingContentM3Expressive
@@ -103,6 +106,7 @@ import com.maxrave.simpmusic.ui.screen.player.content.toAudioQualityLabel
 import com.maxrave.simpmusic.viewModel.LyricsProvider
 import com.maxrave.simpmusic.viewModel.NowPlayingBottomSheetUIEvent
 import com.maxrave.simpmusic.viewModel.NowPlayingBottomSheetViewModel
+import com.maxrave.simpmusic.spotify.SpotifyLibrarySyncService
 import com.maxrave.simpmusic.viewModel.SharedViewModel
 import com.maxrave.simpmusic.viewModel.UIEvent
 import kotlinx.coroutines.delay
@@ -195,7 +199,7 @@ fun NowPlayingScreenContent(
     // Apple Music style's quality line under the progress bar — see NowPlayingContentState.toAudioQualityLabel.
     val formatState by sharedViewModel.format.collectAsStateWithLifecycle(initialValue = null)
 
-    val shouldShowVideo by sharedViewModel.getVideo.collectAsStateWithLifecycle()
+    // This build is audio-only: ignore legacy video preferences so old installs cannot re-enable video.
     val translatedVoteState by sharedViewModel.translatedVoteState.collectAsStateWithLifecycle()
     val lyricsVoteState by sharedViewModel.lyricsVoteState.collectAsStateWithLifecycle()
     val isUserLoggedIn by sharedViewModel
@@ -407,6 +411,9 @@ fun NowPlayingScreenContent(
     var showAddToPlaylistDirectly by rememberSaveable {
         mutableStateOf(false)
     }
+    var showPlaylistSourcePicker by rememberSaveable { mutableStateOf(false) }
+    var showSpotifyAddToPlaylist by rememberSaveable { mutableStateOf(false) }
+    val spotifySyncService: SpotifyLibrarySyncService = koinInject()
 
     var shouldShowToolbar by remember {
         mutableStateOf(false)
@@ -618,7 +625,7 @@ fun NowPlayingScreenContent(
             timelineFlow = sharedViewModel.timeline,
             likeStatus = likeStatus == YouTubeLikeStatus.LIKE,
             castState = castState,
-            shouldShowVideo = shouldShowVideo,
+            shouldShowVideo = false,
             isUserLoggedIn = isUserLoggedIn,
             artworkQueue = artworkQueue,
             currentOrderIndex = currentOrderIndex,
@@ -685,14 +692,12 @@ fun NowPlayingScreenContent(
             onShowMoreSheet = { showSheet = true },
             onShowQueue = { showQueueBottomSheet = true },
             onShowInfo = { showInfoBottomSheet = true },
-            onShowAddToPlaylist = { showAddToPlaylistDirectly = true },
+            onShowAddToPlaylist = { showPlaylistSourcePicker = true },
             onShowFullscreenLyrics = { showFullscreenLyrics = true },
             onShowVoteDialog = { showVoteDialog = true },
             onLyricsOffsetChange = { sharedViewModel.setLyricsOffsetMs(it) },
-            onEnterFullscreenVideo = {
-                onDismiss()
-                navController.navigate(FullscreenDestination)
-            },
+            // Video playback is disabled in this audio-only build.
+            onEnterFullscreenVideo = {},
             onDismiss = onDismiss,
             onToolbarVisibilityChange = { shouldShowToolbar = it },
             onMoveQueueItem = { from, to ->
@@ -847,6 +852,40 @@ fun NowPlayingScreenContent(
             onDismiss = {
                 showInfoBottomSheet = false
             },
+        )
+    }
+
+    if (showPlaylistSourcePicker) {
+        AlertDialog(
+            onDismissRequest = { showPlaylistSourcePicker = false },
+            title = { Text("Add to playlist") },
+            text = {
+                Column {
+                    TextButton(
+                        onClick = {
+                            showPlaylistSourcePicker = false
+                            showAddToPlaylistDirectly = true
+                        },
+                    ) { Text("SimpMusic / YouTube Music playlists") }
+                    TextButton(
+                        onClick = {
+                            showPlaylistSourcePicker = false
+                            showSpotifyAddToPlaylist = true
+                        },
+                    ) { Text("Spotify playlists") }
+                }
+            },
+            confirmButton = {},
+        )
+    }
+
+    if (showSpotifyAddToPlaylist) {
+        val song = sharedViewModel.nowPlayingState.value?.songEntity
+        SpotifyAddToPlaylistSheet(
+            songTitle = song?.title.orEmpty(),
+            artists = song?.artistName.orEmpty().joinToString(", "),
+            onDismiss = { showSpotifyAddToPlaylist = false },
+            service = spotifySyncService,
         )
     }
 

@@ -179,7 +179,7 @@ fun NowPlayingContentAppleMusic(
     val fullscreenCanvas = state.screenData.canvasData?.let { !it.isAnimatedArtwork() } == true
     val showCanvasBackdrop =
         viewState == AppleMusicView.MAIN &&
-            (fullscreenCanvas || (state.screenData.canvasData == null && state.screenData.isVideo && state.shouldShowVideo))
+            fullscreenCanvas
 
     val deviceVolumeController = rememberDeviceVolumeController()
     val typography = rememberAppleMusicTypography()
@@ -369,7 +369,8 @@ private fun AppleMusicMainView(
     val canvasData = state.screenData.canvasData
     val animatedArtwork = canvasData?.takeIf { it.isAnimatedArtwork() }
     val fullscreenCanvas = canvasData != null && animatedArtwork == null
-    val isVideoBackdrop = canvasData == null && state.screenData.isVideo && state.shouldShowVideo
+    // Audio-only build: video tracks may supply audio, but never render a video surface.
+    val isVideoBackdrop = false
 
     // Same fade/half-blended-frame fix M3E uses: fast fade-in, relaxed fade-out. Only a fullscreen
     // canvas ever hides the controls — every other artwork sits above them, not behind them.
@@ -1110,33 +1111,36 @@ private fun AppleMusicArtworkPage(
                 } else {
                     Crossfade(targetState = state.screenData.canvasData?.isVideo, label = "appleMusicCanvasKind") { isVideo ->
                         if (isVideo == true) {
-                            state.screenData.canvasData?.url?.let { url ->
-                                // cropToBounds, NOT the default style's fill-height-and-overflow
-                                // modifiers. Those drive MediaPlayerView's legacy path, which sizes
-                                // the surface from a `widthPx` seeded to the SCREEN width and only
-                                // corrects it once onVideoSizeChanged reports the real aspect ratio.
-                                // For a 9:16 canvas the true width is far wider than the screen, so
-                                // the first frame renders fitted and the next one jumps to cropped —
-                                // the sideways flash when returning from the Lyrics tab, where the
-                                // Crossfade had disposed this whole subtree and every remember with
-                                // it. The crop path takes its size from Media3's own
-                                // presentationState instead, so there is no wrong guess to correct,
-                                // and it holds a shutter over the surface until the first frame is
-                                // actually ready.
-                                MediaPlayerView(
-                                    url = url,
-                                    cropToBounds = true,
-                                    modifier = Modifier.fillMaxSize(),
-                                )
-                            }
+                            // Render the cached still image instead of streaming the Spotify Canvas MP4.
+                            AsyncImage(
+                                model =
+                                    ImageRequest
+                                        .Builder(LocalPlatformContext.current)
+                                        .data(state.screenData.canvasData?.thumbUrl ?: state.screenData.thumbnailURL)
+                                        .diskCachePolicy(CachePolicy.ENABLED)
+                                        .diskCacheKey(state.screenData.canvasData?.thumbUrl ?: state.screenData.thumbnailURL)
+                                        .crossfade(550)
+                                        .build(),
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize(),
+                            )
                         } else if (isVideo == false) {
                             AsyncImage(
                                 model =
                                     ImageRequest
                                         .Builder(LocalPlatformContext.current)
-                                        .data(state.screenData.canvasData?.url)
+                                        .data(
+                                            state.screenData.canvasData?.url
+                                                ?.takeUnless { it.contains(".m3u8", ignoreCase = true) }
+                                                ?: state.screenData.thumbnailURL,
+                                        )
                                         .diskCachePolicy(CachePolicy.ENABLED)
-                                        .diskCacheKey(state.screenData.canvasData?.url)
+                                        .diskCacheKey(
+                                            state.screenData.canvasData?.url
+                                                ?.takeUnless { it.contains(".m3u8", ignoreCase = true) }
+                                                ?: state.screenData.thumbnailURL,
+                                        )
                                         .crossfade(550)
                                         .build(),
                                 contentDescription = null,
@@ -1336,14 +1340,7 @@ private fun BoxScope.AnimatedArtworkFrame(
                     modifier = Modifier.fillMaxSize(),
                 )
             }
-            // The frame already has the clip's own shape, so "crop to bounds" crops nothing; it is
-            // the path that sizes the surface from Media3's own presentation state (see the canvas
-            // note in AppleMusicArtworkPage) and keeps a shutter up until the first frame is ready.
-            MediaPlayerView(
-                url = canvas.url,
-                cropToBounds = true,
-                modifier = Modifier.fillMaxSize(),
-            )
+            // Audio-only build: keep the still image above; never open the animated HLS artwork URL.
             // Nothing can blur the video surface itself, so its band is the still's, blurred: at 32dp
             // it is a wash of the clip's colours, which barely move in the strip under the status bar.
             stillRequest?.let { TopBandBlur(model = it, solidTo = topBandSolid, fadeTo = topBand) }

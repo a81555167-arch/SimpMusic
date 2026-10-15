@@ -166,7 +166,6 @@ import simpmusic.composeapp.generated.resources.retry
 import simpmusic.composeapp.generated.resources.search_for
 import simpmusic.composeapp.generated.resources.search_for_songs_artists_albums_playlists_and_more
 import simpmusic.composeapp.generated.resources.song
-import simpmusic.composeapp.generated.resources.videos
 import simpmusic.composeapp.generated.resources.what_do_you_want_to_listen_to
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -189,6 +188,27 @@ fun SearchScreen(
     var searchText by rememberSaveable { mutableStateOf("") }
     var isSearchSubmitted by rememberSaveable { mutableStateOf(false) }
     var isExpanded by rememberSaveable { mutableStateOf(false) }
+
+    val pendingSongSearch by searchViewModel.pendingSongSearch.collectAsStateWithLifecycle()
+    LaunchedEffect(pendingSongSearch) {
+        val query = pendingSongSearch ?: return@LaunchedEffect
+        searchText = query
+        searchUIType = SearchUIType.SEARCH_RESULTS
+        isSearchSubmitted = true
+        searchViewModel.setSearchType(SearchType.SONGS)
+        searchViewModel.searchSongs(query)
+        searchViewModel.consumePendingSongSearch()
+    }
+    val pendingAllSearch by searchViewModel.pendingAllSearch.collectAsStateWithLifecycle()
+    LaunchedEffect(pendingAllSearch) {
+        val query = pendingAllSearch ?: return@LaunchedEffect
+        searchText = query
+        searchUIType = SearchUIType.SEARCH_RESULTS
+        isSearchSubmitted = true
+        searchViewModel.setSearchType(SearchType.ALL)
+        searchViewModel.searchAll(query)
+        searchViewModel.consumePendingAllSearch()
+    }
 
     val focusRequester = remember { FocusRequester() }
 
@@ -240,7 +260,6 @@ fun SearchScreen(
     val artistString = stringResource(Res.string.artists).lowercase()
     val albumString = stringResource(Res.string.albums).lowercase()
     val playlistString = stringResource(Res.string.playlists).lowercase()
-    val videoString = stringResource(Res.string.videos).lowercase()
     val podcastString = stringResource(Res.string.podcasts).lowercase()
 
     // Animated Placeholder
@@ -251,7 +270,6 @@ fun SearchScreen(
                 "$searchForString $artistString...",
                 "$searchForString $albumString...",
                 "$searchForString $playlistString...",
-                "$searchForString $videoString...",
                 "$searchForString $podcastString...",
             )
         }
@@ -1155,7 +1173,7 @@ fun SearchScreen(
                                 .padding(top = 10.dp)
                                 .padding(horizontal = 12.dp),
                     ) {
-                        SearchType.entries.forEach { id ->
+                        SearchType.entries.filter { it != SearchType.VIDEOS }.forEach { id ->
                             val isSelected = id == searchScreenState.searchType
                             Spacer(modifier = Modifier.width(4.dp))
                             Chip(

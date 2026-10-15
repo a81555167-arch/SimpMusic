@@ -100,7 +100,6 @@ import com.maxrave.common.QUALITY
 import com.maxrave.common.SUPPORTED_LANGUAGE
 import com.maxrave.common.SUPPORTED_LOCATION
 import com.maxrave.common.SponsorBlockType
-import com.maxrave.common.VIDEO_QUALITY
 import com.maxrave.domain.extension.now
 import com.maxrave.domain.data.model.lyrics.RomanizationDictionaryState
 import com.maxrave.domain.data.model.lyrics.RomanizationLanguage
@@ -226,7 +225,6 @@ import simpmusic.composeapp.generated.resources.change_language_warning
 import simpmusic.composeapp.generated.resources.check_for_update
 import simpmusic.composeapp.generated.resources.checking
 import simpmusic.composeapp.generated.resources.clear
-import simpmusic.composeapp.generated.resources.clear_canvas_cache
 import simpmusic.composeapp.generated.resources.clear_downloaded_cache
 import simpmusic.composeapp.generated.resources.clear_listening_history
 import simpmusic.composeapp.generated.resources.clear_listening_history_confirm
@@ -258,8 +256,6 @@ import simpmusic.composeapp.generated.resources.discord_integration
 import simpmusic.composeapp.generated.resources.donation
 import simpmusic.composeapp.generated.resources.download_quality
 import simpmusic.composeapp.generated.resources.downloaded_cache
-import simpmusic.composeapp.generated.resources.enable_animated_artwork
-import simpmusic.composeapp.generated.resources.enable_canvas
 import simpmusic.composeapp.generated.resources.enable_liquid_glass_effect
 import simpmusic.composeapp.generated.resources.enable_liquid_glass_effect_description
 import simpmusic.composeapp.generated.resources.enable_rich_presence
@@ -368,7 +364,6 @@ import simpmusic.composeapp.generated.resources.original_audio
 import simpmusic.composeapp.generated.resources.other_app
 import simpmusic.composeapp.generated.resources.play_explicit_content
 import simpmusic.composeapp.generated.resources.play_explicit_content_description
-import simpmusic.composeapp.generated.resources.play_video_for_video_track_instead_of_audio_only
 import simpmusic.composeapp.generated.resources.playback
 import simpmusic.composeapp.generated.resources.player_cache
 import simpmusic.composeapp.generated.resources.preferred_audio_language
@@ -410,6 +405,8 @@ import simpmusic.composeapp.generated.resources.sponsor_block_intro
 import simpmusic.composeapp.generated.resources.spotify
 import simpmusic.composeapp.generated.resources.spotify_canvas_cache
 import simpmusic.composeapp.generated.resources.spotify_lyrícs_info
+import simpmusic.composeapp.generated.resources.spotify_data_saver
+import simpmusic.composeapp.generated.resources.spotify_data_saver_description
 import simpmusic.composeapp.generated.resources.storage
 import simpmusic.composeapp.generated.resources.such_as_music_video_lyrics_video_podcasts_and_more
 import simpmusic.composeapp.generated.resources.sync_follow_to_youtube
@@ -435,8 +432,6 @@ import simpmusic.composeapp.generated.resources.use_your_system_equalizer
 import simpmusic.composeapp.generated.resources.user_interface
 import simpmusic.composeapp.generated.resources.version
 import simpmusic.composeapp.generated.resources.version_format
-import simpmusic.composeapp.generated.resources.video_download_quality
-import simpmusic.composeapp.generated.resources.video_quality
 import simpmusic.composeapp.generated.resources.warning
 import simpmusic.composeapp.generated.resources.weekly
 import simpmusic.composeapp.generated.resources.what_segments_will_be_skipped
@@ -515,14 +510,11 @@ fun SettingScreen(
     val quality by viewModel.quality.collectAsStateWithLifecycle()
     val downloadQuality by viewModel.downloadQuality.collectAsStateWithLifecycle()
     val autoDownloadLikedSongs by viewModel.autoDownloadLikedSongs.collectAsStateWithLifecycle()
-    val videoDownloadQuality by viewModel.videoDownloadQuality.collectAsStateWithLifecycle()
     val keepYoutubePlaylistOffline by viewModel.keepYouTubePlaylistOffline.collectAsStateWithLifecycle()
     val localTrackingEnabled by viewModel.localTrackingEnabled.collectAsStateWithLifecycle(initialValue = false)
     val blogNotificationEnabled by viewModel.blogNotificationEnabled.collectAsStateWithLifecycle()
     val combineLocalAndYouTubeLiked by viewModel.combineLocalAndYouTubeLiked.collectAsStateWithLifecycle()
-    val playVideo by remember { viewModel.playVideoInsteadOfAudio.map { it == TRUE } }.collectAsStateWithLifecycle(initialValue = false)
     val radioAudioOnly by remember { viewModel.radioAudioOnly.map { it == TRUE } }.collectAsStateWithLifecycle(initialValue = false)
-    val videoQuality by viewModel.videoQuality.collectAsStateWithLifecycle()
     val sendData by remember { viewModel.sendBackToGoogle.map { it == TRUE } }.collectAsStateWithLifecycle(initialValue = false)
     val normalizeVolume by remember { viewModel.normalizeVolume.map { it == TRUE } }.collectAsStateWithLifecycle(initialValue = false)
     val skipSilent by remember { viewModel.skipSilent.map { it == TRUE } }.collectAsStateWithLifecycle(initialValue = false)
@@ -534,8 +526,7 @@ fun SettingScreen(
     val preferredAudioLanguage by viewModel.preferredAudioLanguage.collectAsStateWithLifecycle()
     val spotifyLoggedIn by viewModel.spotifyLogIn.collectAsStateWithLifecycle()
     val spotifyLyrics by viewModel.spotifyLyrics.collectAsStateWithLifecycle()
-    val spotifyCanvas by viewModel.spotifyCanvas.collectAsStateWithLifecycle()
-    val amAnimatedArtwork by viewModel.amAnimatedArtwork.collectAsStateWithLifecycle()
+    val spotifyDataSaverEnabled by viewModel.spotifyDataSaverEnabled.collectAsStateWithLifecycle()
     val enableSponsorBlock by remember { viewModel.sponsorBlockEnabled.map { it == TRUE } }.collectAsStateWithLifecycle(initialValue = false)
     val skipSegments by viewModel.sponsorBlockCategories.collectAsStateWithLifecycle()
     val playerCache by viewModel.cacheSize.collectAsStateWithLifecycle()
@@ -1049,6 +1040,12 @@ fun SettingScreen(
                     },
                 )
                 SettingItem(
+                    title = stringResource(Res.string.spotify_data_saver),
+                    subtitle = stringResource(Res.string.spotify_data_saver_description),
+                    smallSubtitle = true,
+                    switch = (spotifyDataSaverEnabled to { viewModel.setSpotifyDataSaverEnabled(it) }),
+                )
+                SettingItem(
                     title = stringResource(Res.string.quality),
                     subtitle = quality ?: "",
                     smallSubtitle = true,
@@ -1097,62 +1094,10 @@ fun SettingScreen(
                     },
                 )
                 SettingItem(
-                    title = stringResource(Res.string.video_quality),
-                    subtitle = videoQuality ?: "",
-                    onClick = {
-                        viewModel.setAlertData(
-                            SettingAlertState(
-                                title = runBlocking { getString(Res.string.video_quality) },
-                                selectOne =
-                                    SettingAlertState.SelectData(
-                                        listSelect =
-                                            VIDEO_QUALITY.items.map { item ->
-                                                (item.toString() == videoQuality) to item.toString()
-                                            },
-                                    ),
-                                confirm =
-                                    runBlocking { getString(Res.string.change) } to { state ->
-                                        viewModel.changeVideoQuality(state.selectOne?.getSelected() ?: "")
-                                    },
-                                dismiss = runBlocking { getString(Res.string.cancel) },
-                            ),
-                        )
-                    },
-                )
-                SettingItem(
-                    title = stringResource(Res.string.video_download_quality),
-                    subtitle = videoDownloadQuality ?: "",
-                    onClick = {
-                        viewModel.setAlertData(
-                            SettingAlertState(
-                                title = runBlocking { getString(Res.string.video_download_quality) },
-                                selectOne =
-                                    SettingAlertState.SelectData(
-                                        listSelect =
-                                            VIDEO_QUALITY.items.map { item ->
-                                                (item.toString() == videoDownloadQuality) to item.toString()
-                                            },
-                                    ),
-                                confirm =
-                                    runBlocking { getString(Res.string.change) } to { state ->
-                                        viewModel.setVideoDownloadQuality(state.selectOne?.getSelected() ?: "")
-                                    },
-                                dismiss = runBlocking { getString(Res.string.cancel) },
-                            ),
-                        )
-                    },
-                )
-                SettingItem(
                     title = stringResource(Res.string.auto_download_liked_songs),
                     subtitle = stringResource(Res.string.auto_download_liked_songs_description),
                     smallSubtitle = true,
                     switch = (autoDownloadLikedSongs to { viewModel.setAutoDownloadLikedSongs(it) }),
-                )
-                SettingItem(
-                    title = stringResource(Res.string.play_video_for_video_track_instead_of_audio_only),
-                    subtitle = stringResource(Res.string.such_as_music_video_lyrics_video_podcasts_and_more),
-                    smallSubtitle = true,
-                    switch = (playVideo to { viewModel.setPlayVideoInsteadOfAudio(it) }),
                 )
                 SettingItem(
                     title = stringResource(Res.string.radio_audio_only),
@@ -2038,20 +1983,9 @@ fun SettingScreen(
                     switch = (spotifyLyrics to { viewModel.setSpotifyLyrics(it) }),
                     isEnable = spotifyLoggedIn,
                 )
-                SettingItem(
-                    title = stringResource(Res.string.enable_canvas),
-                    subtitle = stringResource(Res.string.canvas_info),
-                    switch = (spotifyCanvas to { viewModel.setSpotifyCanvas(it) }),
-                    isEnable = spotifyLoggedIn,
-                )
                 // Sits with the canvas because it replaces it, but carries no isEnable: the two
                 // rows above need a Spotify session and this one needs no account at all, so
                 // gating it on spotifyLoggedIn would lock it away from the users it works for.
-                SettingItem(
-                    title = stringResource(Res.string.enable_animated_artwork),
-                    subtitle = stringResource(Res.string.animated_artwork_info),
-                    switch = (amAnimatedArtwork to { viewModel.setAMAnimatedArtwork(it) }),
-                )
             }
         }
         item(key = "discord") {
@@ -2124,81 +2058,6 @@ fun SettingScreen(
                 }
             }
         }
-        item(key = "sponsor_block") {
-            SettingGroup(
-                title = stringResource(Res.string.sponsorBlock),
-                // The project's note sits under the card, where a grouped list keeps its explanations.
-                footer = {
-                    val beforeUrl = stringResource(Res.string.sponsor_block_intro).substringBefore("https://sponsor.ajay.app/")
-                    val afterUrl = stringResource(Res.string.sponsor_block_intro).substringAfter("https://sponsor.ajay.app/")
-                    Text(
-                        buildAnnotatedString {
-                            append(beforeUrl)
-                            withLink(
-                                LinkAnnotation.Url(
-                                    "https://sponsor.ajay.app/",
-                                    TextLinkStyles(style = SpanStyle(color = MaterialTheme.colorScheme.primary)),
-                                ),
-                            ) {
-                                append("https://sponsor.ajay.app/")
-                            }
-                            append(afterUrl)
-                        },
-                        style = typo().bodySmall,
-                    )
-                },
-            ) {
-                SettingItem(
-                    title = stringResource(Res.string.enable_sponsor_block),
-                    subtitle = stringResource(Res.string.skip_sponsor_part_of_video),
-                    switch = (enableSponsorBlock to { viewModel.setSponsorBlockEnabled(it) }),
-                )
-                val listName =
-                    SponsorBlockType.toList().map { it.displayString() }
-                SettingItem(
-                    title = stringResource(Res.string.categories_sponsor_block),
-                    subtitle = stringResource(Res.string.what_segments_will_be_skipped),
-                    onClick = {
-                        viewModel.setAlertData(
-                            SettingAlertState(
-                                title = runBlocking { getString(Res.string.categories_sponsor_block) },
-                                multipleSelect =
-                                    SettingAlertState.SelectData(
-                                        listSelect =
-                                            listName
-                                                .mapIndexed { index, item ->
-                                                    (
-                                                        skipSegments?.contains(
-                                                            SponsorBlockType.toList().getOrNull(index)?.value,
-                                                        ) == true
-                                                    ) to item
-                                                }.also {
-                                                    Logger.w("SettingScreen", "SettingAlertState: $skipSegments")
-                                                    Logger.w("SettingScreen", "SettingAlertState: $it")
-                                                },
-                                    ),
-                                confirm =
-                                    runBlocking { getString(Res.string.save) } to { state ->
-                                        viewModel.setSponsorBlockCategories(
-                                            state.multipleSelect
-                                                ?.getListSelected()
-                                                ?.map { selected ->
-                                                    listName.indexOf(selected)
-                                                }?.mapNotNull { s ->
-                                                    SponsorBlockType.toList().getOrNull(s).let {
-                                                        it?.value
-                                                    }
-                                                }?.toCollection(ArrayList()) ?: arrayListOf(),
-                                        )
-                                    },
-                                dismiss = runBlocking { getString(Res.string.cancel) },
-                            ),
-                        )
-                    },
-                    isEnable = enableSponsorBlock,
-                )
-            }
-        }
         if (getPlatform() == Platform.Android) {
             item(key = "storage") {
                 SettingGroup(title = stringResource(Res.string.storage)) {
@@ -2247,23 +2106,6 @@ fun SettingScreen(
                                     confirm =
                                         runBlocking { getString(Res.string.clear) } to {
                                             viewModel.clearThumbnailCache(platformContext)
-                                        },
-                                    dismiss = runBlocking { getString(Res.string.cancel) },
-                                ),
-                            )
-                        },
-                    )
-                    SettingItem(
-                        title = stringResource(Res.string.spotify_canvas_cache),
-                        subtitle = "${canvasCache.bytesToMB()} MB",
-                        onClick = {
-                            viewModel.setBasicAlertData(
-                                SettingBasicAlertState(
-                                    title = runBlocking { getString(Res.string.clear_canvas_cache) },
-                                    message = null,
-                                    confirm =
-                                        runBlocking { getString(Res.string.clear) } to {
-                                            viewModel.clearCanvasCache()
                                         },
                                     dismiss = runBlocking { getString(Res.string.cancel) },
                                 ),
@@ -2441,21 +2283,6 @@ fun SettingScreen(
                         )
                         Spacer(Modifier.width(8.dp))
                         Text(text = stringResource(Res.string.player_cache), style = typo().bodySmall)
-                    }
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-                    ) {
-                        Box(
-                            Modifier
-                                .size(12.dp)
-                                .clip(CircleShape)
-                                .background(
-                                    Color.Cyan,
-                                ),
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text(text = stringResource(Res.string.spotify_canvas_cache), style = typo().bodySmall)
                     }
                     Row(
                         verticalAlignment = Alignment.CenterVertically,

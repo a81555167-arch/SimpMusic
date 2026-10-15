@@ -13,6 +13,8 @@ import com.maxrave.domain.manager.DataStoreManager.Values.TRUE
 import com.maxrave.domain.repository.HomeRepository
 import com.maxrave.domain.utils.Resource
 import com.maxrave.logger.Logger
+import com.maxrave.simpmusic.spotify.SpotifyHomeSection
+import com.maxrave.simpmusic.spotify.SpotifyLibrarySyncService
 import com.maxrave.simpmusic.viewModel.base.BaseViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -20,6 +22,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -34,10 +37,24 @@ import simpmusic.composeapp.generated.resources.new_release
 import simpmusic.composeapp.generated.resources.song
 import simpmusic.composeapp.generated.resources.view_count
 
+private data class HomeInputs(
+    val location: String,
+    val language: String,
+    val cookie: String,
+    val params: String?,
+)
+
 class HomeViewModel(
     private val dataStoreManager: DataStoreManager,
     private val homeRepository: HomeRepository,
+    private val spotifySyncService: SpotifyLibrarySyncService,
 ) : BaseViewModel() {
+    private val _spotifyHomeSections = MutableStateFlow<List<SpotifyHomeSection>>(emptyList())
+    val spotifyHomeSections: StateFlow<List<SpotifyHomeSection>> = _spotifyHomeSections
+    private val _spotifyHomeRefreshing = MutableStateFlow(false)
+    val spotifyHomeRefreshing: StateFlow<Boolean> = _spotifyHomeRefreshing
+    private val _spotifySyncError = MutableStateFlow<String?>(null)
+    val spotifySyncError: StateFlow<String?> = _spotifySyncError
     private val _homeItemList: MutableStateFlow<List<HomeItem>> =
         MutableStateFlow(arrayListOf())
     val homeItemList: StateFlow<List<HomeItem>> = _homeItemList
@@ -95,57 +112,44 @@ class HomeViewModel(
             _showLogInAlert.update { true }
         }
         homeJob = Job()
+        refreshHomeExtras()
+        observeSpotifySessionAndSync()
         viewModelScope.launch {
             regionCodeChart.value = dataStoreManager.chartKey.first()
             exploreChart(regionCodeChart.value ?: "ZZ")
             language = dataStoreManager.getString(SELECTED_LANGUAGE).first()
                 ?: SUPPORTED_LANGUAGE.codes.first()
-            //  refresh when region change
-            val job1 =
+            // One combined trigger prevents the initial emissions of several independent
+            // collectors from launching duplicate, overlapping home requests. Location,
+            // language, cookie and pagination changes are coalesced into a single refresh.
+            val homeInputs = combine(
+                dataStoreManager.location,
+                dataStoreManager.language,
+                dataStoreManager.cookie,
+                params,
+            ) { location, selectedLanguage, cookie, currentParams ->
+                HomeInputs(location, selectedLanguage, cookie, currentParams)
+            }
+            val refreshHomeJob =
                 launch {
-                    dataStoreManager.location.distinctUntilChanged().collect {
-                        regionCode = it
-                        getHomeItemList(params.value)
-                    }
-                }
-            //  refresh when language change
-            val job2 =
-                launch {
-                    dataStoreManager.language.distinctUntilChanged().collect {
-                        language = it
-                        getHomeItemList(params.value)
-                    }
-                }
-            val job3 =
-                launch {
-                    dataStoreManager.cookie.distinctUntilChanged().collect {
-                        getHomeItemList(params.value)
-                        _accountInfo.emit(
-                            Pair(
-                                dataStoreManager.getString("AccountName").first(),
-                                dataStoreManager.getString("AccountThumbUrl").first(),
-                            ),
-                        )
-                    }
-                }
-            val job4 =
-                launch {
-                    params.collectLatest {
-                        getHomeItemList(it)
-                    }
-                }
-            val job5 =
-                launch {
-                    dataStoreManager
-                        .cookie
+                    homeInputs
                         .distinctUntilChanged()
-                        .collectLatest {
-                            if (it.isNotEmpty()) {
-                                Logger.w(tag, "Cookie changed, refreshing home")
-                                loading.value = true
-                                delay(1000) // To wait for the cookie to be saved properly
-                                getHomeItemList(params.value)
-                            }
+                        .collectLatest { inputs ->
+                            regionCode = inputs.location
+                            language = inputs.language
+                            _accountInfo.emit(
+                                if (inputs.cookie.isNotEmpty()) {
+                                    Pair(
+                                        dataStoreManager.getString("AccountName").first(),
+                                        dataStoreManager.getString("AccountThumbUrl").first(),
+                                    )
+                                } else {
+                                    null
+                                },
+                            )
+                            // Briefly coalesce bursts from login/cookie and preference updates.
+                            delay(250)
+                            getHomeItemList(inputs.params)
                         }
                 }
             val job6 =
@@ -161,11 +165,7 @@ class HomeViewModel(
                                 ?.url
                     }
                 }
-            job1.join()
-            job2.join()
-            job3.join()
-            job4.join()
-            job5.join()
+            refreshHomeJob.join()
             job6.join()
         }
     }
@@ -191,95 +191,118 @@ class HomeViewModel(
         homeJob?.cancel()
         homeJob =
             viewModelScope.launch {
-                combine(
-                    homeRepository.getHomeData(
-                        params,
-                        getString(Res.string.view_count),
-                        getString(Res.string.song),
-                    ),
-                    homeRepository.getMoodAndMomentsData(),
-                    homeRepository.getChartData(dataStoreManager.chartKey.first()),
-                    homeRepository.getNewRelease(
-                        getString(Res.string.new_release),
-                        getString(Res.string.music_video),
-                    ),
-                ) { home, exploreMood, exploreChart, newRelease ->
-                    HomeDataCombine(home, exploreMood, exploreChart, newRelease)
-                }.collect { result ->
-                    val home = result.home
-                    Logger.d("home size", "${home.data?.second?.size}")
-                    val exploreMoodItem = result.mood
-                    val chart = result.chart
-                    val newRelease = result.newRelease
+                homeRepository.getHomeData(
+                    params,
+                    getString(Res.string.view_count),
+                    getString(Res.string.song),
+                ).collect { home ->
                     when (home) {
                         is Resource.Success -> {
                             _continuation.value = home.data?.first
-                            _homeItemList.value = home.data?.second ?: listOf()
+                            _homeItemList.value = home.data?.second.orEmpty()
                         }
 
-                        else -> {
+                        is Resource.Error -> {
+                            // Keep the last visible home content on a transient failure. Clearing
+                            // it here would turn a brief network problem into an empty home screen.
                             _continuation.value = null
-                            _homeItemList.value = listOf()
+                            showSnackBarErrorState.emit(home.message ?: "Unable to refresh home")
+                            Logger.w(tag, "getHomeItemList: ${home.message}")
                         }
                     }
-                    if (continuation.value.isNullOrEmpty()) {
-                        _homeListState.value = ListState.PAGINATION_EXHAUST
-                    } else {
-                        _homeListState.value = ListState.IDLE
-                    }
-                    when (chart) {
-                        is Resource.Success -> {
-                            _chart.value = chart.data
+
+                    _homeListState.value =
+                        if (continuation.value.isNullOrEmpty()) {
+                            ListState.PAGINATION_EXHAUST
+                        } else {
+                            ListState.IDLE
                         }
 
-                        else -> {
-                            _chart.value = null
-                        }
-                    }
-                    when (newRelease) {
-                        is Resource.Success -> {
-                            _newRelease.value = newRelease.data ?: arrayListOf()
-                        }
-
-                        else -> {
-                            _newRelease.value = arrayListOf()
-                        }
-                    }
-                    when (exploreMoodItem) {
-                        is Resource.Success -> {
-                            _exploreMoodItem.value = exploreMoodItem.data
-                        }
-
-                        else -> {
-                            _exploreMoodItem.value = null
-                        }
-                    }
-                    regionCodeChart.value = dataStoreManager.chartKey.first()
-                    Logger.d("HomeViewModel", "getHomeItemList: $result")
-                    dataStoreManager.cookie.first().let {
-                        if (it != "") {
-                            _accountInfo.emit(
-                                Pair(
-                                    dataStoreManager.getString("AccountName").first(),
-                                    dataStoreManager.getString("AccountThumbUrl").first(),
-                                ),
-                            )
-                        }
-                    }
-                    when {
-                        home is Resource.Error -> home.message
-                        exploreMoodItem is Resource.Error -> exploreMoodItem.message
-                        chart is Resource.Error -> chart.message
-                        else -> null
-                    }?.let {
-                        showSnackBarErrorState.emit(it)
-                        Logger.w("Error", "getHomeItemList: ${home.message}")
-                        Logger.w("Error", "getHomeItemList: ${exploreMoodItem.message}")
-                        Logger.w("Error", "getHomeItemList: ${chart.message}")
+                    dataStoreManager.cookie.first().takeIf { it.isNotEmpty() }?.let {
+                        _accountInfo.emit(
+                            Pair(
+                                dataStoreManager.getString("AccountName").first(),
+                                dataStoreManager.getString("AccountThumbUrl").first(),
+                            ),
+                        )
                     }
                     loading.value = false
                 }
             }
+    }
+
+    /**
+     * Home's auxiliary shelves do not depend on the selected mood, region or login cookie.
+     * Fetch them independently so every home refresh does not also re-download genres and
+     * new-release metadata. Chart refresh is handled by [exploreChart] when its region changes.
+     */
+    private fun refreshHomeExtras() {
+        viewModelScope.launch {
+            combine(
+                homeRepository.getMoodAndMomentsData(),
+                homeRepository.getNewRelease(
+                    getString(Res.string.new_release),
+                    getString(Res.string.music_video),
+                ),
+            ) { mood, newRelease -> mood to newRelease }
+                .collect { (mood, newRelease) ->
+                    when (mood) {
+                        is Resource.Success -> _exploreMoodItem.value = mood.data
+                        is Resource.Error -> Logger.w(tag, "Home moods refresh failed: ${mood.message}")
+                    }
+                    when (newRelease) {
+                        is Resource.Success -> _newRelease.value = newRelease.data.orEmpty()
+                        is Resource.Error -> Logger.w(tag, "New releases refresh failed: ${newRelease.message}")
+                    }
+                }
+        }
+    }
+
+    private fun observeSpotifySessionAndSync() {
+        viewModelScope.launch {
+            dataStoreManager.spdc.distinctUntilChanged().collect { cookie ->
+                if (cookie.isBlank()) {
+                    _spotifyHomeSections.value = emptyList()
+                    _spotifySyncError.value = null
+                    return@collect
+                }
+                _spotifyHomeSections.value = spotifySyncService.parseHomeSections(spotifySyncService.cachedHomeJson())
+                val dataSaver = spotifySyncService.isDataSaverEnabled()
+                _spotifyHomeRefreshing.value = true
+                spotifySyncService.syncHome(dataSaverEnabled = dataSaver)
+                    .onSuccess { snapshot ->
+                        _spotifyHomeSections.value = spotifySyncService.parseHomeSections(snapshot)
+                        _spotifySyncError.value = null
+                    }
+                    .onFailure { error ->
+                        _spotifySyncError.value = error.message
+                        Logger.w(tag, "Spotify home sync failed: ${error.message}")
+                    }
+                // The library sync has its own six-hour clock and cache. Never redownload it
+                // just because the home feed was refreshed.
+                spotifySyncService.syncLibrary(dataSaverEnabled = dataSaver)
+                    .onFailure { error -> Logger.w(tag, "Spotify library sync failed: ${error.message}") }
+                _spotifyHomeRefreshing.value = false
+            }
+        }
+    }
+
+    /** User-triggered refresh; explicit refresh is allowed even when data saver is enabled. */
+    fun refreshSpotifyHome() {
+        viewModelScope.launch {
+            _spotifyHomeRefreshing.value = true
+            spotifySyncService.syncHome(
+                dataSaverEnabled = spotifySyncService.isDataSaverEnabled(),
+                forceRefresh = true,
+            ).onSuccess { snapshot ->
+                _spotifyHomeSections.value = spotifySyncService.parseHomeSections(snapshot)
+                _spotifySyncError.value = null
+            }.onFailure { error ->
+                _spotifySyncError.value = error.message
+                Logger.w(tag, "Manual Spotify home refresh failed: ${error.message}")
+            }
+            _spotifyHomeRefreshing.value = false
+        }
     }
 
     /** A shelf's "Play all": YouTube's own finite queue of that shelf's songs. */

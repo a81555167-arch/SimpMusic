@@ -102,6 +102,31 @@ class SearchViewModel(
     private val _searchHistory: MutableStateFlow<List<String>> = MutableStateFlow(emptyList())
     val searchHistory: StateFlow<List<String>> get() = _searchHistory.asStateFlow()
 
+    private val _pendingSongSearch = MutableStateFlow<String?>(null)
+    val pendingSongSearch: StateFlow<String?> get() = _pendingSongSearch.asStateFlow()
+    private val _pendingAllSearch = MutableStateFlow<String?>(null)
+    val pendingAllSearch: StateFlow<String?> get() = _pendingAllSearch.asStateFlow()
+
+    /** Opens the in-app YouTube Music song search for a track originating from Spotify. */
+    fun requestSongSearch(query: String) {
+        _pendingAllSearch.value = null
+        _pendingSongSearch.value = query.trim().takeIf { it.isNotEmpty() }
+    }
+
+    /** Searches YouTube Music for a Spotify home card without launching Spotify playback. */
+    fun requestAllSearch(query: String) {
+        _pendingSongSearch.value = null
+        _pendingAllSearch.value = query.trim().takeIf { it.isNotEmpty() }
+    }
+
+    fun consumePendingSongSearch() {
+        _pendingSongSearch.value = null
+    }
+
+    fun consumePendingAllSearch() {
+        _pendingAllSearch.value = null
+    }
+
     /** Browse categories shown on the empty search screen, the way YouTube Music itself does. */
     private val _moodAndGenres: MutableStateFlow<Mood?> = MutableStateFlow(null)
     val moodAndGenres: StateFlow<Mood?> get() = _moodAndGenres.asStateFlow()
@@ -213,7 +238,6 @@ class SearchViewModel(
         _searchScreenUIState.value = SearchScreenUIState.Loading
         viewModelScope.launch {
             var song = ArrayList<SongsResult>()
-            val video = ArrayList<VideosResult>()
             var album = ArrayList<AlbumsResult>()
             var artist = ArrayList<ArtistsResult>()
             var playlist = ArrayList<PlaylistsResult>()
@@ -259,15 +283,6 @@ class SearchViewModel(
                         }
                     }
                 }
-            val job5 =
-                launch {
-                    searchRepository.getSearchDataVideo(query).collect { values ->
-                        when (values) {
-                            is Resource.Success -> values.data?.let { video.addAll(it) }
-                            is Resource.Error -> {}
-                        }
-                    }
-                }
             val job6 =
                 launch {
                     searchRepository.getSearchDataFeaturedPlaylist(query).collect { values ->
@@ -290,7 +305,6 @@ class SearchViewModel(
             job2.join()
             job3.join()
             job4.join()
-            job5.join()
             job6.join()
             job7.join()
 
@@ -300,7 +314,6 @@ class SearchViewModel(
                         temp += artist[i]
                     }
                     temp.addAll(song)
-                    temp.addAll(video)
                     temp.addAll(album)
                     temp.addAll(playlist)
                     temp.addAll(featuredPlaylist)
@@ -308,7 +321,6 @@ class SearchViewModel(
                 } else {
                     temp.addAll(artist)
                     temp.addAll(song)
-                    temp.addAll(video)
                     temp.addAll(album)
                     temp.addAll(playlist)
                     temp.addAll(featuredPlaylist)
@@ -323,7 +335,7 @@ class SearchViewModel(
                         searchArtistsResult = artist,
                         searchAlbumsResult = album,
                         searchPlaylistsResult = playlist,
-                        searchVideosResult = video,
+                        searchVideosResult = emptyList(),
                         searchFeaturedPlaylistsResult = featuredPlaylist,
                         searchPodcastsResult = podcast,
                     )

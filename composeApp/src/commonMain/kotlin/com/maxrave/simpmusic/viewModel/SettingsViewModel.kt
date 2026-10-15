@@ -16,6 +16,7 @@ import com.maxrave.domain.data.player.GenericCastState
 import com.maxrave.domain.data.player.ReverbPreset
 import com.maxrave.domain.extension.toNetScapeString
 import com.maxrave.domain.manager.DataStoreManager
+import com.maxrave.simpmusic.spotify.SpotifyLibrarySyncService
 import com.maxrave.domain.mediaservice.handler.DownloadHandler
 import com.maxrave.domain.repository.AccountRepository
 import com.maxrave.domain.repository.ArtistRepository
@@ -71,6 +72,7 @@ import kotlin.coroutines.cancellation.CancellationException
 
 class SettingsViewModel(
     private val dataStoreManager: DataStoreManager,
+    private val spotifySyncService: SpotifyLibrarySyncService,
     private val commonRepository: CommonRepository,
     private val songRepository: SongRepository,
     private val accountRepository: AccountRepository,
@@ -296,6 +298,7 @@ class SettingsViewModel(
         getRadioAudioOnly()
         getVideoQuality()
         getSpotifyLogIn()
+        getSpotifyDataSaverEnabled()
         getSpotifyLyrics()
         getSyncFollowToYouTube()
         getEqualizer()
@@ -1142,16 +1145,16 @@ class SettingsViewModel(
 
     fun getPlayVideoInsteadOfAudio() {
         viewModelScope.launch {
-            dataStoreManager.watchVideoInsteadOfPlayingAudio.collect { playVideoInsteadOfAudio ->
-                _playVideoInsteadOfAudio.emit(playVideoInsteadOfAudio)
-            }
+            dataStoreManager.setWatchVideoInsteadOfPlayingAudio(false)
+            _playVideoInsteadOfAudio.emit(DataStoreManager.Values.FALSE)
         }
     }
 
     fun setPlayVideoInsteadOfAudio(playVideoInsteadOfAudio: Boolean) {
+        // Compatibility shim for older callers: video playback is disabled in this build.
         viewModelScope.launch {
-            dataStoreManager.setWatchVideoInsteadOfPlayingAudio(playVideoInsteadOfAudio)
-            getPlayVideoInsteadOfAudio()
+            dataStoreManager.setWatchVideoInsteadOfPlayingAudio(false)
+            _playVideoInsteadOfAudio.emit(DataStoreManager.Values.FALSE)
         }
     }
 
@@ -1678,6 +1681,25 @@ class SettingsViewModel(
     private var _spotifyLogIn: MutableStateFlow<Boolean> = MutableStateFlow(false)
     val spotifyLogIn: StateFlow<Boolean> = _spotifyLogIn
 
+    private val _spotifyDataSaverEnabled = MutableStateFlow(true)
+    val spotifyDataSaverEnabled: StateFlow<Boolean> = _spotifyDataSaverEnabled
+
+    fun getSpotifyDataSaverEnabled() {
+        viewModelScope.launch {
+            val saved = dataStoreManager.getString(SpotifyLibrarySyncService.DATA_SAVER_KEY).first()
+            _spotifyDataSaverEnabled.value = saved?.toBooleanStrictOrNull() ?: true
+        }
+    }
+
+    fun setSpotifyDataSaverEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            // This switch controls Spotify library/home refreshes only. It must not silently
+            // change YouTube Music playback quality or overwrite the user's audio preference.
+            dataStoreManager.putString(SpotifyLibrarySyncService.DATA_SAVER_KEY, enabled.toString())
+            _spotifyDataSaverEnabled.value = enabled
+        }
+    }
+
     fun getSpotifyLogIn() {
         viewModelScope.launch {
             dataStoreManager.spdc.collect { loggedIn ->
@@ -1704,6 +1726,7 @@ class SettingsViewModel(
                 dataStoreManager.setSpotifyClientTokenExpires(0)
                 dataStoreManager.setSpotifyPersonalToken("")
                 dataStoreManager.setSpotifyPersonalTokenExpires(0)
+                spotifySyncService.clearLocalCache()
                 delay(500)
             }
             getSpotifyLogIn()
@@ -1984,35 +2007,29 @@ class SettingsViewModel(
 
     fun getSpotifyCanvas() {
         viewModelScope.launch {
-            dataStoreManager.spotifyCanvas.collect {
-                if (it == DataStoreManager.TRUE) {
-                    _spotifyCanvas.emit(true)
-                } else {
-                    _spotifyCanvas.emit(false)
-                }
-            }
+            dataStoreManager.setSpotifyCanvas(false)
+            dataStoreManager.spotifyCanvas.collect { _spotifyCanvas.emit(false) }
         }
     }
 
-    fun setSpotifyCanvas(loggedIn: Boolean) {
+    fun setSpotifyCanvas(@Suppress("UNUSED_PARAMETER") loggedIn: Boolean) {
         viewModelScope.launch {
-            dataStoreManager.setSpotifyCanvas(loggedIn)
-            getSpotifyCanvas()
+            dataStoreManager.setSpotifyCanvas(false)
+            _spotifyCanvas.emit(false)
         }
     }
 
     fun getAMAnimatedArtwork() {
         viewModelScope.launch {
-            dataStoreManager.amAnimatedArtwork.collect {
-                _amAnimatedArtwork.emit(it == DataStoreManager.TRUE)
-            }
+            dataStoreManager.setAMAnimatedArtwork(false)
+            dataStoreManager.amAnimatedArtwork.collect { _amAnimatedArtwork.emit(false) }
         }
     }
 
-    fun setAMAnimatedArtwork(enabled: Boolean) {
+    fun setAMAnimatedArtwork(@Suppress("UNUSED_PARAMETER") enabled: Boolean) {
         viewModelScope.launch {
-            dataStoreManager.setAMAnimatedArtwork(enabled)
-            getAMAnimatedArtwork()
+            dataStoreManager.setAMAnimatedArtwork(false)
+            _amAnimatedArtwork.emit(false)
         }
     }
 

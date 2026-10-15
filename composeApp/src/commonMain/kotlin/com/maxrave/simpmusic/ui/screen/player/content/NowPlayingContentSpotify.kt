@@ -420,31 +420,38 @@ fun NowPlayingContentSpotify(
                             if (pageHasCanvas) {
                                 Crossfade(targetState = state.screenData.canvasData?.isVideo) { isVideo ->
                                     if (isVideo == true) {
-                                        state.screenData.canvasData?.url?.let { url ->
-                                            MediaPlayerView(
-                                                url = url,
-                                                modifier =
-                                                    Modifier
-                                                        .fillMaxHeight()
-                                                        .then(
-                                                            if (getPlatform() == Platform.Desktop) {
-                                                                Modifier
-                                                            } else {
-                                                                Modifier
-                                                                    .wrapContentWidth(unbounded = true, align = Alignment.CenterHorizontally)
-                                                                    .align(Alignment.Center)
-                                                            },
-                                                        ),
-                                            )
-                                        }
+                                        // Canvas MP4s are deliberately not streamed in this audio-only build.
+                                        // Use Spotify's still thumbnail instead, so opening Now Playing cannot
+                                        // silently start a second, high-bandwidth video stream.
+                                        AsyncImage(
+                                            model =
+                                                ImageRequest
+                                                    .Builder(LocalPlatformContext.current)
+                                                    .data(state.screenData.canvasData?.thumbUrl ?: state.screenData.thumbnailURL)
+                                                    .diskCachePolicy(CachePolicy.ENABLED)
+                                                    .diskCacheKey(state.screenData.canvasData?.thumbUrl ?: state.screenData.thumbnailURL)
+                                                    .crossfade(550)
+                                                    .build(),
+                                            contentDescription = null,
+                                            contentScale = ContentScale.Crop,
+                                            modifier = Modifier.fillMaxSize(),
+                                        )
                                     } else if (isVideo == false) {
                                         AsyncImage(
                                             model =
                                                 ImageRequest
                                                     .Builder(LocalPlatformContext.current)
-                                                    .data(state.screenData.canvasData?.url)
+                                                    .data(
+                                                        state.screenData.canvasData?.url
+                                                            ?.takeUnless { it.contains(".m3u8", ignoreCase = true) }
+                                                            ?: state.screenData.thumbnailURL,
+                                                    )
                                                     .diskCachePolicy(CachePolicy.ENABLED)
-                                                    .diskCacheKey(state.screenData.canvasData?.url)
+                                                    .diskCacheKey(
+                                                        state.screenData.canvasData?.url
+                                                            ?.takeUnless { it.contains(".m3u8", ignoreCase = true) }
+                                                            ?: state.screenData.thumbnailURL,
+                                                    )
                                                     .crossfade(550)
                                                     .build(),
                                             contentDescription = null,
@@ -588,7 +595,7 @@ fun NowPlayingContentSpotify(
                                                             // the shadow above is cast from — so it takes the
                                                             // video frame's shape, or a 16:9 shadow rings a
                                                             // tall video.
-                                                            if (state.screenData.isVideo && state.shouldShowVideo) {
+                                                            if (false) {
                                                                 Modifier.aspectRatio(state.videoAspectRatio)
                                                             } else {
                                                                 Modifier
@@ -599,14 +606,14 @@ fun NowPlayingContentSpotify(
                                                         .clip(
                                                             RoundedCornerShape(8.dp),
                                                         ).alpha(
-                                                            if (!state.screenData.isVideo || !state.shouldShowVideo) 1f else 0f,
+                                                            if (true) 1f else 0f,
                                                         ),
                                             )
                                         }
 
                                         // Inline video player (current page + isVideo + shouldShowVideo).
                                         androidx.compose.animation.AnimatedVisibility(
-                                            visible = state.screenData.isVideo && state.shouldShowVideo,
+                                            visible = false,
                                             modifier = Modifier.align(Alignment.Center),
                                         ) {
                                             var internalShowSubtitle by rememberSaveable {

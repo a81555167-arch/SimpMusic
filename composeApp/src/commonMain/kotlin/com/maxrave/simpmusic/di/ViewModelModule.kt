@@ -34,8 +34,10 @@ import org.koin.dsl.module
 
 val viewModelModule =
     module {
+        single { com.maxrave.simpmusic.spotify.SpotifyLibrarySyncService(get()) }
         single {
             SharedViewModel(
+                get(),
                 get(),
                 get(),
                 get(),
@@ -106,6 +108,7 @@ val viewModelModule =
             HomeViewModel(
                 get(),
                 get(),
+                get(),
             )
         }
         viewModel {
@@ -116,6 +119,7 @@ val viewModelModule =
         }
         viewModel {
             SettingsViewModel(
+                get(),
                 get(),
                 get(),
                 get(),
@@ -141,6 +145,7 @@ val viewModelModule =
         }
         viewModel {
             LogInViewModel(
+                get(),
                 get(),
             )
         }

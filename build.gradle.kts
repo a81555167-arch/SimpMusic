@@ -23,12 +23,100 @@ plugins {
     alias(libs.plugins.compose.hotReload) apply false
 }
 
+
+// The core submodule is upstream-owned, so keep the small audio-only compatibility patch here
+// instead of pretending the submodule itself was forked. Legacy queues can retain "Video"-prefixed
+// media IDs; Media3's resolver interprets that prefix as a request for a video stream even when the
+// video UI is disabled. Strip the video prefix from the media source cache key before the resolver runs.
+val audioOnlyCoreSource = layout.projectDirectory.file(
+    "core/media/media3/src/main/java/com/maxrave/media3/service/mediasourcefactory/MergingMediaSourceFactory.kt",
+).asFile
+val audioOnlyPlayerSource = layout.projectDirectory.file(
+    "core/media/media3/src/main/java/com/maxrave/media3/exoplayer/CrossfadeExoPlayerAdapter.kt",
+).asFile
+val patchAudioOnlyCore = tasks.register("patchAudioOnlyCore") {
+    doLast {
+        val sourceFile = audioOnlyCoreSource
+        if (!sourceFile.isFile) {
+            throw GradleException("Audio-only core patch target is missing: ${sourceFile.path}")
+        }
+        val original = sourceFile.readText()
+        val guardMarker = "// Audio-only build guard for legacy video queue items."
+        if (!original.contains(guardMarker)) {
+            val anchor = "        val getVideo = runBlocking(Dispatchers.IO) { dataStoreManager.watchVideoInsteadOfPlayingAudio.first() } == DataStoreManager.Values.TRUE\n"
+            if (!original.contains(anchor)) {
+                throw GradleException(
+                    "The core media-source factory changed; refusing to build without verifying the audio-only patch.",
+                )
+            }
+            val patch = """
+        // Audio-only build guard for legacy video queue items.
+        if (!getVideo && mediaItem.mediaId.startsWith(MERGING_DATA_TYPE.VIDEO)) {
+            val audioOnlyId = mediaItem.mediaId.removePrefix(MERGING_DATA_TYPE.VIDEO)
+            val audioOnlyItem = mediaItem.buildUpon()
+                .setCustomCacheKey(audioOnlyId)
+                .build()
+            return defaultMediaSourceFactory.createMediaSource(audioOnlyItem)
+        }
+"""
+            sourceFile.writeText(original.replace(anchor, anchor + patch))
+        }
+
+        val playerSourceFile = audioOnlyPlayerSource
+        if (!playerSourceFile.isFile) {
+            throw GradleException("Audio-only player patch target is missing: ${playerSourceFile.path}")
+        }
+        val playerOriginal = playerSourceFile.readText()
+        val playerGuardMarker = "// Audio-only build guard: every crossfade and precache player is audio-only."
+        if (!playerOriginal.contains(playerGuardMarker)) {
+            val bufferAnchor = """                        .setBufferDurationsMs(
+                            DefaultLoadControl.DEFAULT_MIN_BUFFER_MS * 4,
+                            DefaultLoadControl.DEFAULT_MAX_BUFFER_MS * 4,
+                            0,
+                            0,
+                        ).build(),"""
+            if (!playerOriginal.contains(bufferAnchor)) {
+                throw GradleException("The core player buffer setup changed; refusing to apply an unverified data-saving patch.")
+            }
+            val bufferReplacement = """                        .setBufferDurationsMs(
+                            30_000,
+                            60_000,
+                            1_000,
+                            2_000,
+                        ).build(),"""
+            val playerAnchor = """                .setRenderersFactory(perPlayerRenderers)
+                .build()
+
+        // The output the user picked"""
+            if (!playerOriginal.contains(playerAnchor)) {
+                throw GradleException("The core player builder changed; refusing to apply an unverified audio-only patch.")
+            }
+            val playerReplacement = """                .setRenderersFactory(perPlayerRenderers)
+                .build()
+
+        // Audio-only build guard: every crossfade and precache player is audio-only.
+        player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
+            .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, true)
+            .build()
+
+        // The output the user picked"""
+            val patchedPlayer = playerOriginal
+                .replace(bufferAnchor, bufferReplacement)
+                .replace(playerAnchor, playerReplacement)
+            playerSourceFile.writeText(patchedPlayer)
+        } else if (playerOriginal.contains("DEFAULT_MIN_BUFFER_MS * 4")) {
+            throw GradleException("Audio-only player patch marker exists but the oversized buffer is still configured.")
+        }
+    }
+}
+
 tasks.register<Delete>("Clean") {
     delete(rootProject.layout.buildDirectory)
 }
 
 subprojects {
     tasks.withType<KotlinCompile>().configureEach {
+        dependsOn(rootProject.tasks.named("patchAudioOnlyCore"))
         compilerOptions {
             if (project.findProperty("enableComposeCompilerReports") == "true") {
                 arrayOf("reports", "metrics").forEach {

@@ -5,6 +5,8 @@ import android.app.Application
 import android.database.CursorWindow
 import android.os.Build
 import android.util.Log
+import androidx.media3.common.C
+import androidx.media3.common.Player
 import androidx.work.Configuration
 import androidx.work.WorkManager
 import cat.ereza.customactivityoncrash.config.CaocConfig
@@ -16,6 +18,7 @@ import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import coil3.request.CachePolicy
 import coil3.request.crossfade
 import com.maxrave.common.AppIdentity
+import com.maxrave.common.Config.MAIN_PLAYER
 import com.maxrave.data.di.loader.loadAllModules
 import com.maxrave.domain.manager.DataStoreManager
 import com.maxrave.logger.Logger
@@ -26,6 +29,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.flow.first
 import multiplatform.network.cmptoast.AppContext
 import okhttp3.OkHttpClient
 import okio.FileSystem
@@ -33,6 +38,7 @@ import org.koin.android.ext.koin.androidContext
 import org.koin.android.ext.koin.androidLogger
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
+import org.koin.core.qualifier.named
 import org.koin.core.context.loadKoinModules
 import org.koin.core.context.startKoin
 import org.koin.core.logger.Level
@@ -48,6 +54,7 @@ class SimpMusicApplication :
 
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val dataStoreManager: DataStoreManager by inject()
+    private val mainPlayer: Player by inject(named(MAIN_PLAYER))
     private lateinit var autoBackupScheduler: AutoBackupScheduler
 
     override fun onCreate() {
@@ -69,6 +76,50 @@ class SimpMusicApplication :
             )
             loadKoinModules(viewModelModule)
         }
+        // Audio-only build invariant: reset any legacy preference before the media service can
+        // restore a queue in the background. This is intentionally synchronous and tiny.
+        runBlocking {
+            // This build is intentionally audio-only. Clear legacy preferences before any
+            // player/session can read them, including Canvas and animated-cover video flags.
+            dataStoreManager.setWatchVideoInsteadOfPlayingAudio(false)
+            dataStoreManager.setSpotifyCanvas(false)
+            dataStoreManager.setAMAnimatedArtwork(false)
+        }
+
+        // Disable the video renderer at the player level as a final guard. This also prevents
+        // HLS live playlists from downloading video segments even when no video surface is visible.
+        fun enforceAudioOnlyTracks() {
+            runCatching {
+                val parameters = mainPlayer.trackSelectionParameters
+                if (C.TRACK_TYPE_VIDEO !in parameters.disabledTrackTypes) {
+                    mainPlayer.trackSelectionParameters =
+                        parameters.buildUpon()
+                            .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, true)
+                            .build()
+                }
+            }.onFailure { error ->
+                Logger.e("AudioOnly", "Could not disable video tracks: ${error.message}")
+            }
+        }
+        enforceAudioOnlyTracks()
+        // SimpMusic's crossfade engine can replace its underlying ExoPlayer between tracks.
+        // Re-apply the invariant when the active item/track set changes, not just at app startup.
+        mainPlayer.addListener(
+            object : Player.Listener {
+                override fun onMediaItemTransition(
+                    mediaItem: androidx.media3.common.MediaItem?,
+                    reason: Int,
+                ) {
+                    enforceAudioOnlyTracks()
+                }
+
+                override fun onTracksChanged(tracks: androidx.media3.common.Tracks) {
+                    enforceAudioOnlyTracks()
+                }
+            },
+        )
+
+
         // provide custom configuration
         val workConfig =
             Configuration
@@ -121,7 +172,14 @@ class SimpMusicApplication :
             ImageLoader
                 .Builder(context)
                 .components {
-                    add(NetworkFirstInterceptor { imageLoader })
+                    add(
+                        NetworkFirstInterceptor(
+                            // Cover art and thumbnails rarely change at a stable URL. Keep them fresh for
+                            // thirty days to avoid repeated mobile-data downloads.
+                            ttlMillis = 30L * 24 * 60 * 60 * 1000,
+                            imageLoader = { imageLoader },
+                        ),
+                    )
                     add(
                         OkHttpNetworkFetcherFactory(
                             callFactory = {

@@ -97,6 +97,8 @@ import com.maxrave.simpmusic.ui.icon.SimpIcons
 import com.maxrave.simpmusic.ui.navigation.destination.home.ListenTogetherDestination
 import com.maxrave.simpmusic.ui.navigation.destination.home.SettingsDestination
 import com.maxrave.simpmusic.ui.theme.typo
+import com.maxrave.simpmusic.spotify.SpotifyLibrarySyncService
+import com.maxrave.simpmusic.viewModel.SearchViewModel
 import com.maxrave.simpmusic.viewModel.LibraryViewModel
 import com.maxrave.simpmusic.viewModel.SharedViewModel
 import com.maxrave.simpmusic.viewModel.SongSelectionViewModel
@@ -162,6 +164,8 @@ fun LibraryScreen(
     val recentlyAdded by viewModel.recentlyAdded.collectAsStateWithLifecycle()
     val libraryOverview by viewModel.libraryOverview.collectAsStateWithLifecycle()
 
+    val spotifySyncService: SpotifyLibrarySyncService = koinInject()
+    val spotifySearchViewModel: SearchViewModel = koinInject()
     val selectionState = rememberSongSelectionState()
     val selectionViewModel: SongSelectionViewModel = koinViewModel()
     val tasteViewModel: TasteViewModel = koinViewModel()
@@ -284,6 +288,14 @@ fun LibraryScreen(
                             ),
                         state = state,
                     ) {
+                        item(key = "spotify-library-shelf") {
+                            SpotifyLibraryShelf(
+                                service = spotifySyncService,
+                                searchViewModel = spotifySearchViewModel,
+                                navController = navController,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp),
+                            )
+                        }
                         item {
                             LibraryTilingBox(navController, libraryOverview)
                         }
