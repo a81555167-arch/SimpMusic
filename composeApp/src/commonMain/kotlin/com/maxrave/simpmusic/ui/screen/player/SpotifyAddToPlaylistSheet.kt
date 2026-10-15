@@ -32,7 +32,6 @@ import coil3.compose.AsyncImage
 import com.maxrave.simpmusic.spotify.SpotifyLibrarySnapshot
 import com.maxrave.simpmusic.spotify.SpotifyLibrarySyncService
 import kotlinx.coroutines.launch
-import org.koin.compose.koinInject
 
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
@@ -40,7 +39,7 @@ fun SpotifyAddToPlaylistSheet(
     songTitle: String,
     artists: String,
     onDismiss: () -> Unit,
-    service: SpotifyLibrarySyncService = koinInject(),
+    service: SpotifyLibrarySyncService,
 ) {
     val coroutineScope = rememberCoroutineScope()
     var library by remember { mutableStateOf(SpotifyLibrarySnapshot(emptyList(), emptyList())) }
