@@ -639,6 +639,9 @@ class SpotifyLibrarySyncService(
                     ?.let(::applyHashRegistry)
                 hashRegistryLoaded = true
             }
+            // In data-saver mode, rely on the bundled or previously cached hashes. Only
+            // fetch the small remote registry when Spotify rejects a persisted query and force=true.
+            if (!force && isDataSaverEnabled()) return@withLock
             val lastFetch = dataStoreManager.getString(KEY_HASH_FETCH_TIME).first()?.toLongOrNull()
             if (!force && lastFetch != null && now >= lastFetch && now - lastFetch < HASH_REFRESH_INTERVAL_MS) {
                 return@withLock
