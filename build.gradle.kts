@@ -31,6 +31,9 @@ plugins {
 val audioOnlyCoreSource = layout.projectDirectory.file(
     "core/media/media3/src/main/java/com/maxrave/media3/service/mediasourcefactory/MergingMediaSourceFactory.kt",
 ).asFile
+val audioOnlyPlayerSource = layout.projectDirectory.file(
+    "core/media/media3/src/main/java/com/maxrave/media3/exoplayer/CrossfadeExoPlayerAdapter.kt",
+).asFile
 val patchAudioOnlyCore = tasks.register("patchAudioOnlyCore") {
     doLast {
         val sourceFile = audioOnlyCoreSource
@@ -59,9 +62,7 @@ val patchAudioOnlyCore = tasks.register("patchAudioOnlyCore") {
             sourceFile.writeText(original.replace(anchor, anchor + patch))
         }
 
-        val playerSourceFile = rootProject.file(
-            "core/media/media3/src/main/java/com/maxrave/media3/exoplayer/CrossfadeExoPlayerAdapter.kt",
-        )
+        val playerSourceFile = audioOnlyPlayerSource
         if (!playerSourceFile.isFile) {
             throw GradleException("Audio-only player patch target is missing: ${playerSourceFile.path}")
         }
