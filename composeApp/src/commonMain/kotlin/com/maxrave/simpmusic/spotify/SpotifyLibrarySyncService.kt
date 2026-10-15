@@ -468,7 +468,11 @@ class SpotifyLibrarySyncService(
                 val artist = artistElement as? JsonObject ?: return@mapNotNull null
                 (artist["profile"] as? JsonObject)?.text("name") ?: artist.text("name")
             }.map(::normalize)
-            if (expectedArtists.isNotEmpty() && foundArtists.none { found -> expectedArtists.any { expected -> expected == found } }) {
+            // Use the primary artist as the identity check. Accepting any overlapping artist
+            // can select a different collaboration with the same title and mutate the wrong Spotify track.
+            val expectedPrimaryArtist = expectedArtists.firstOrNull()
+                ?: return@firstNotNullOfOrNull null
+            if (expectedPrimaryArtist !in foundArtists) {
                 return@firstNotNullOfOrNull null
             }
             val uri = wrapper.text("_uri") ?: wrapper.text("uri") ?: return@firstNotNullOfOrNull null
