@@ -23,12 +23,51 @@ plugins {
     alias(libs.plugins.compose.hotReload) apply false
 }
 
+
+// The core submodule is upstream-owned, so keep the small audio-only compatibility patch here
+// instead of pretending the submodule itself was forked. Legacy queues can retain "Video"-prefixed
+// media IDs; Media3's resolver interprets that prefix as a request for a video stream even when the
+// video UI is disabled. Strip it from the media source's local copy before the resolver runs.
+val patchAudioOnlyCore = tasks.register("patchAudioOnlyCore") {
+    doLast {
+        val sourceFile = rootProject.file(
+            "core/media/media3/src/main/java/com/maxrave/media3/service/mediasourcefactory/MergingMediaSourceFactory.kt",
+        )
+        if (!sourceFile.isFile) {
+            throw GradleException("Audio-only core patch target is missing: ${sourceFile.path}")
+        }
+        val original = sourceFile.readText()
+        val guardMarker = "// Audio-only build guard for legacy video queue items."
+        if (original.contains(guardMarker)) return@doLast
+
+        val anchor = "        val getVideo = runBlocking(Dispatchers.IO) { dataStoreManager.watchVideoInsteadOfPlayingAudio.first() } == DataStoreManager.Values.TRUE\n"
+        if (!original.contains(anchor)) {
+            throw GradleException(
+                "The core media-source factory changed; refusing to build without verifying the audio-only patch.",
+            )
+        }
+        val patch = """
+        // Audio-only build guard for legacy video queue items.
+        if (!getVideo && mediaItem.mediaId.startsWith(MERGING_DATA_TYPE.VIDEO)) {
+            val audioOnlyId = mediaItem.mediaId.removePrefix(MERGING_DATA_TYPE.VIDEO)
+            val audioOnlyItem = mediaItem.buildUpon()
+                .setMediaId(audioOnlyId)
+                .setCustomCacheKey(audioOnlyId)
+                .build()
+            return defaultMediaSourceFactory.createMediaSource(audioOnlyItem)
+        }
+"""
+        sourceFile.writeText(original.replace(anchor, anchor + patch))
+    }
+}
+
 tasks.register<Delete>("Clean") {
     delete(rootProject.layout.buildDirectory)
 }
 
 subprojects {
     tasks.withType<KotlinCompile>().configureEach {
+        dependsOn(rootProject.tasks.named("patchAudioOnlyCore"))
         compilerOptions {
             if (project.findProperty("enableComposeCompilerReports") == "true") {
                 arrayOf("reports", "metrics").forEach {
