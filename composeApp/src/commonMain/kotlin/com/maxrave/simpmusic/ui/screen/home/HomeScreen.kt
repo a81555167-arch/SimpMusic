@@ -165,6 +165,7 @@ import com.maxrave.simpmusic.ui.theme.typo
 import com.maxrave.simpmusic.utils.VersionManager
 import com.maxrave.simpmusic.utils.eligiblePromos
 import com.maxrave.simpmusic.viewModel.FOOTGUNS_STAR_KEY
+import com.maxrave.simpmusic.spotify.SpotifyHomeSection
 import com.maxrave.simpmusic.viewModel.HomeViewModel
 import com.maxrave.simpmusic.viewModel.HomeViewModel.Companion.HOME_PARAMS_COMMUTE
 import com.maxrave.simpmusic.viewModel.HomeViewModel.Companion.HOME_PARAMS_ENERGIZE
@@ -262,6 +263,8 @@ fun HomeScreen(
     val isScrollingUp by scrollState.isScrollingUp()
     val accountInfo by viewModel.accountInfo.collectAsStateWithLifecycle()
     val homeData by viewModel.homeItemList.collectAsStateWithLifecycle()
+    val spotifyHomeSections by viewModel.spotifyHomeSections.collectAsStateWithLifecycle()
+    val spotifyHomeRefreshing by viewModel.spotifyHomeRefreshing.collectAsStateWithLifecycle()
     val newRelease by viewModel.newRelease.collectAsStateWithLifecycle()
     val chart by viewModel.chart.collectAsStateWithLifecycle()
     val moodMomentAndGenre by viewModel.exploreMoodItem.collectAsStateWithLifecycle()
@@ -381,6 +384,7 @@ fun HomeScreen(
     val onRefresh: () -> Unit = {
         isRefreshing = true
         viewModel.getHomeItemList(params)
+        viewModel.refreshSpotifyHome()
         Logger.w("HomeScreen", "onRefresh")
     }
     LaunchedEffect(key1 = reloadDestination) {
@@ -721,7 +725,7 @@ fun HomeScreen(
         ) {
             Crossfade(targetState = loading, label = "Home Shimmer") { loading ->
                 if (!loading) {
-                    if (homeData.isEmpty()) {
+                    if (homeData.isEmpty() && spotifyHomeSections.isEmpty()) {
                         OfflineErrorState(
                             onRetry = onRefresh,
                             onOpenDownloaded = {
@@ -738,6 +742,16 @@ fun HomeScreen(
                         state = scrollState,
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
+                        if (spotifyHomeSections.isNotEmpty()) {
+                            item(key = "spotify-home-shelves") {
+                                SpotifyHomeShelf(
+                                    sections = spotifyHomeSections,
+                                    isRefreshing = spotifyHomeRefreshing,
+                                    onRefresh = { viewModel.refreshSpotifyHome() },
+                                    modifier = Modifier.padding(horizontal = 15.dp, vertical = 8.dp),
+                                )
+                            }
+                        }
                         itemsIndexed(homeData, key = { _, item ->
                             item.hashCode().toString() + (mainHomeThumbnail ?: "nothumb")
                         }) { index, item ->
