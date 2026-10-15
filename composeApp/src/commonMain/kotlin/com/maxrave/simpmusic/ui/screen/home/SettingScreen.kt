@@ -410,6 +410,8 @@ import simpmusic.composeapp.generated.resources.sponsor_block_intro
 import simpmusic.composeapp.generated.resources.spotify
 import simpmusic.composeapp.generated.resources.spotify_canvas_cache
 import simpmusic.composeapp.generated.resources.spotify_lyrícs_info
+import simpmusic.composeapp.generated.resources.spotify_data_saver
+import simpmusic.composeapp.generated.resources.spotify_data_saver_description
 import simpmusic.composeapp.generated.resources.storage
 import simpmusic.composeapp.generated.resources.such_as_music_video_lyrics_video_podcasts_and_more
 import simpmusic.composeapp.generated.resources.sync_follow_to_youtube
@@ -535,6 +537,7 @@ fun SettingScreen(
     val spotifyLoggedIn by viewModel.spotifyLogIn.collectAsStateWithLifecycle()
     val spotifyLyrics by viewModel.spotifyLyrics.collectAsStateWithLifecycle()
     val spotifyCanvas by viewModel.spotifyCanvas.collectAsStateWithLifecycle()
+    val spotifyDataSaverEnabled by viewModel.spotifyDataSaverEnabled.collectAsStateWithLifecycle()
     val amAnimatedArtwork by viewModel.amAnimatedArtwork.collectAsStateWithLifecycle()
     val enableSponsorBlock by remember { viewModel.sponsorBlockEnabled.map { it == TRUE } }.collectAsStateWithLifecycle(initialValue = false)
     val skipSegments by viewModel.sponsorBlockCategories.collectAsStateWithLifecycle()
@@ -1979,6 +1982,12 @@ fun SettingScreen(
                             navController.navigate(SpotifyLoginDestination)
                         }
                     },
+                )
+                SettingItem(
+                    title = stringResource(Res.string.spotify_data_saver),
+                    subtitle = stringResource(Res.string.spotify_data_saver_description),
+                    smallSubtitle = true,
+                    switch = (spotifyDataSaverEnabled to { viewModel.setSpotifyDataSaverEnabled(it) }),
                 )
                 SettingItem(
                     title = stringResource(Res.string.enable_spotify_lyrics),
