@@ -46,6 +46,7 @@ fun SpotifyAddToPlaylistSheet(
     var addingPlaylistId by remember { mutableStateOf<String?>(null) }
     var likingTrack by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
+    var messageIsError by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         service.cachedLibraryJson()?.let { library = service.parseLibrarySnapshot(it) }
@@ -89,12 +90,17 @@ fun SpotifyAddToPlaylistSheet(
                             coroutineScope.launch {
                                 likingTrack = true
                                 message = null
+                                messageIsError = false
                                 service.setLikedByMetadata(songTitle, artists, true)
                                     .onSuccess {
+                                        messageIsError = false
                                         message = "Added to Spotify Liked Songs."
                                         service.cachedLibraryJson()?.let { library = service.parseLibrarySnapshot(it) }
                                     }
-                                    .onFailure { message = it.message ?: "Could not add this track to Spotify Liked Songs." }
+                                    .onFailure {
+                                        messageIsError = true
+                                        message = it.message ?: "Could not add this track to Spotify Liked Songs."
+                                    }
                                 likingTrack = false
                             }
                         },
@@ -102,7 +108,13 @@ fun SpotifyAddToPlaylistSheet(
                     ) { Text("Like") }
                 }
             }
-            message?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+            message?.let {
+                Text(
+                    it,
+                    color = if (messageIsError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
             LazyColumn(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -133,9 +145,16 @@ fun SpotifyAddToPlaylistSheet(
                                 coroutineScope.launch {
                                     addingPlaylistId = playlist.id
                                     message = null
+                                    messageIsError = false
                                     service.addTrackToPlaylistByMetadata(playlist.id, songTitle, artists)
-                                        .onSuccess { message = "Added to " + playlist.name + " on Spotify." }
-                                        .onFailure { message = it.message ?: "Could not add this track to Spotify." }
+                                        .onSuccess {
+                                            messageIsError = false
+                                            message = "Added to " + playlist.name + " on Spotify."
+                                        }
+                                        .onFailure {
+                                            messageIsError = true
+                                            message = it.message ?: "Could not add this track to Spotify."
+                                        }
                                     addingPlaylistId = null
                                 }
                             }, enabled = addingPlaylistId == null) { Text("Add") }
