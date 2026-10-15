@@ -70,51 +70,63 @@ class SpotifyLibrarySyncService(
     fun parseHomeSections(snapshot: String?): List<SpotifyHomeSection> {
         if (snapshot.isNullOrBlank()) return emptyList()
         return runCatching {
-            val root = json.parseToJsonElement(snapshot).jsonObject
-            val feed = root["feed"]?.jsonObject ?: return emptyList()
-            val sections = feed["sectionContainer"]?.jsonObject
-                ?.get("sections")?.jsonObject?.get("items")?.jsonArray.orEmpty()
+            val root = json.parseToJsonElement(snapshot) as? JsonObject ?: return emptyList()
+            val feed = root["feed"] as? JsonObject ?: return emptyList()
+            val sectionContainer = feed["sectionContainer"] as? JsonObject ?: return emptyList()
+            val sectionsObject = sectionContainer["sections"] as? JsonObject ?: return emptyList()
+            val sections = sectionsObject["items"] as? JsonArray ?: return emptyList()
             sections.mapNotNull { sectionElement ->
-                val section = sectionElement.jsonObject
-                val sectionData = section["data"]?.jsonObject
-                val titleData = sectionData?.get("title")?.jsonObject
-                val title = titleData?.text("transformedLabel")
-                    ?: titleData?.text("translatedBaseText")
-                    ?: titleData?.text("text")
-                    ?: return@mapNotNull null
-                val itemElements = section["sectionItems"]?.jsonObject
-                    ?.get("items")?.jsonArray.orEmpty()
-                val cards = itemElements.mapNotNull { itemElement ->
-                    val content = itemElement.jsonObject["content"]?.jsonObject ?: return@mapNotNull null
-                    val data = content["data"]?.jsonObject ?: return@mapNotNull null
-                    val uri = data.text("uri") ?: data.text("id")?.let { id ->
-                        when (content.text("__typename")) {
-                            "PlaylistResponseWrapper" -> "spotify:playlist:$id"
-                            "AlbumResponseWrapper" -> "spotify:album:$id"
-                            "ArtistResponseWrapper" -> "spotify:artist:$id"
-                            else -> null
-                        }
-                    } ?: return@mapNotNull null
-                    val name = data.text("name")
-                        ?: data["profile"]?.jsonObject?.text("name")
-                        ?: data["title"]?.jsonObject?.text("text")
-                        ?: return@mapNotNull null
-                    val images = data["coverArt"]?.jsonObject?.get("sources")?.jsonArray
-                        ?: data["visuals"]?.jsonObject?.get("avatarImage")?.jsonObject?.get("sources")?.jsonArray
-                        ?: data["images"]?.jsonObject?.get("items")?.jsonArray?.firstOrNull()
-                            ?.jsonObject?.get("sources")?.jsonArray
-                    val imageUrl = images?.firstOrNull()?.jsonObject?.text("url")
-                    val subtitle = data["description"]?.jsonPrimitive?.contentOrNull
-                        ?: data["profile"]?.jsonObject?.text("name")
-                    SpotifyHomeCard(
-                        title = name,
-                        uri = uri,
-                        imageUrl = imageUrl,
-                        subtitle = subtitle,
-                        openUrl = uriToWebUrl(uri),
-                    )
-                }
-                if (cards.isEmpty()) null else SpotifyHomeSection(title, cards)
+                runCatching {
+                    val section = sectionElement as? JsonObject ?: return@runCatching null
+                    val sectionData = section["data"] as? JsonObject
+                    val titleData = sectionData?.get("title") as? JsonObject
+                    val title = titleData?.text("transformedLabel")
+                        ?: titleData?.text("translatedBaseText")
+                        ?: titleData?.text("text")
+                        ?: return@runCatching null
+                    val itemElements = ((section["sectionItems"] as? JsonObject)?.get("items") as? JsonArray).orEmpty()
+                    val cards = itemElements.mapNotNull { itemElement ->
+                        runCatching {
+                            val item = itemElement as? JsonObject ?: return@runCatching null
+                            val content = item["content"] as? JsonObject ?: return@runCatching null
+                            val data = content["data"] as? JsonObject ?: return@runCatching null
+                            val wrapperType = content.text("__typename")
+                            val uri = data.text("uri") ?: data.text("id")?.let { id ->
+                                when (wrapperType) {
+                                    "PlaylistResponseWrapper" -> "spotify:playlist:$id"
+                                    "AlbumResponseWrapper" -> "spotify:album:$id"
+                                    "ArtistResponseWrapper" -> "spotify:artist:$id"
+                                    else -> null
+                                }
+                            } ?: return@runCatching null
+                            val profile = data["profile"] as? JsonObject
+                            val name = data.text("name")
+                                ?: profile?.text("name")
+                                ?: ((data["title"] as? JsonObject)?.text("text"))
+                                ?: return@runCatching null
+                            val coverArt = data["coverArt"] as? JsonObject
+                            val visuals = data["visuals"] as? JsonObject
+                            val avatar = visuals?.get("avatarImage") as? JsonObject
+                            val imagesObject = data["images"] as? JsonObject
+                            val imageSources =
+                                (coverArt?.get("sources") as? JsonArray)
+                                    ?: (avatar?.get("sources") as? JsonArray)
+                                    ?: (((imagesObject?.get("items") as? JsonArray)?.firstOrNull() as? JsonObject)
+                                        ?.get("sources") as? JsonArray)
+                            val imageUrl = (imageSources?.firstOrNull() as? JsonObject)?.text("url")
+                            val subtitle = data.text("description")
+                                ?: profile?.text("name")
+                            SpotifyHomeCard(
+                                title = name,
+                                uri = uri,
+                                imageUrl = imageUrl,
+                                subtitle = subtitle,
+                                openUrl = uriToWebUrl(uri),
+                            )
+                        }.getOrNull()
+                    }
+                    if (cards.isEmpty()) null else SpotifyHomeSection(title, cards)
+                }.getOrNull()
             }
         }.getOrDefault(emptyList())
     }
@@ -246,7 +258,6 @@ class SpotifyLibrarySyncService(
         graphql(token, "addToPlaylist", HASH_PLAYLIST_MUTATION, variables)
         dataStoreManager.putString("$KEY_PLAYLIST_TIME_PREFIX$playlistId", "0")
         syncPlaylistTracks(playlistId, dataSaverEnabled = false, forceRefresh = true).getOrThrow()
-        syncLibrary(dataSaverEnabled = false, forceRefresh = true).getOrThrow()
         Unit
     }
 
@@ -262,7 +273,6 @@ class SpotifyLibrarySyncService(
         graphql(token, "removeFromPlaylist", HASH_PLAYLIST_MUTATION, variables)
         dataStoreManager.putString("$KEY_PLAYLIST_TIME_PREFIX$playlistId", "0")
         syncPlaylistTracks(playlistId, dataSaverEnabled = false, forceRefresh = true).getOrThrow()
-        syncLibrary(dataSaverEnabled = false, forceRefresh = true).getOrThrow()
         Unit
     }
 
