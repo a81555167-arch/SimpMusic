@@ -24,20 +24,23 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
+import androidx.navigation.NavController
 import com.maxrave.simpmusic.spotify.SpotifyHomeSection
+import com.maxrave.simpmusic.ui.navigation.destination.search.SearchDestination
+import com.maxrave.simpmusic.viewModel.SearchViewModel
 
 @Composable
 fun SpotifyHomeShelf(
     sections: List<SpotifyHomeSection>,
     isRefreshing: Boolean,
     onRefresh: () -> Unit,
+    searchViewModel: SearchViewModel,
+    navController: NavController,
     modifier: Modifier = Modifier,
 ) {
-    val uriHandler = LocalUriHandler.current
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(14.dp),
@@ -72,7 +75,12 @@ fun SpotifyHomeShelf(
                             modifier = Modifier
                                 .width(142.dp)
                                 .clickable {
-                                    card.openUrl?.let { url -> runCatching { uriHandler.openUri(url) } }
+                                    val query = listOf(card.title, card.subtitle)
+                                        .filterNotNull()
+                                        .filter { it.isNotBlank() }
+                                        .joinToString(" ")
+                                    searchViewModel.requestAllSearch(query)
+                                    navController.navigate(SearchDestination)
                                 },
                             shape = RoundedCornerShape(14.dp),
                         ) {
