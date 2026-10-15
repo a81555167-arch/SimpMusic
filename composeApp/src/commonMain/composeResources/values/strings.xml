@@ -1001,6 +1001,6 @@
     <string name="log_stack_trace_lines">Stack trace · %1$s lines</string>
     <string name="log_hide_stack_trace">Hide stack trace</string>
     <string name="log_export_failed">Could not export the log</string>
-    <string name="spotify_data_saver">Spotify data saver</string>
-    <string name="spotify_data_saver_description">Cache Spotify playlists and home locally. Automatic refreshes pause after the first sync; tap refresh to update manually.</string>
+    <string name="spotify_data_saver">Data saver</string>
+    <string name="spotify_data_saver_description">Force 66 kbps audio, disable video, cache Spotify playlists and home locally, and pause automatic Spotify refreshes after the first sync. Turn it off to allow scheduled refreshes or choose a higher audio quality.</string>
 </resources>
