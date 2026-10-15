@@ -78,18 +78,6 @@ class SimpMusicApplication :
             )
             loadKoinModules(viewModelModule)
         }
-        // Disable the video renderer at the player level as a final guard. This also prevents
-        // HLS live playlists from downloading video segments even when no video surface is visible.
-        runCatching {
-            mainPlayer.trackSelectionParameters =
-                mainPlayer.trackSelectionParameters
-                    .buildUpon()
-                    .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, true)
-                    .build()
-        }.onFailure { error ->
-            Logger.e("AudioOnly", "Could not disable video tracks: ${error.message}")
-        }
-
         // Audio-only build invariant: reset any legacy preference before the media service can
         // restore a queue in the background. This is intentionally synchronous and tiny.
         runBlocking {
@@ -105,6 +93,19 @@ class SimpMusicApplication :
                 dataStoreManager.setQuality(QUALITY.items[0].toString())
             }
         }
+
+        // Disable the video renderer at the player level as a final guard. This also prevents
+        // HLS live playlists from downloading video segments even when no video surface is visible.
+        runCatching {
+            mainPlayer.trackSelectionParameters =
+                mainPlayer.trackSelectionParameters
+                    .buildUpon()
+                    .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, true)
+                    .build()
+        }.onFailure { error ->
+            Logger.e("AudioOnly", "Could not disable video tracks: ${error.message}")
+        }
+
 
         // provide custom configuration
         val workConfig =
