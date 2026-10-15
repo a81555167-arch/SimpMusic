@@ -26,6 +26,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import multiplatform.network.cmptoast.AppContext
 import okhttp3.OkHttpClient
 import okio.FileSystem
@@ -69,6 +70,12 @@ class SimpMusicApplication :
             )
             loadKoinModules(viewModelModule)
         }
+        // Audio-only build invariant: reset any legacy preference before the media service can
+        // restore a queue in the background. This is intentionally synchronous and tiny.
+        runBlocking {
+            dataStoreManager.setWatchVideoInsteadOfPlayingAudio(false)
+        }
+
         // provide custom configuration
         val workConfig =
             Configuration
