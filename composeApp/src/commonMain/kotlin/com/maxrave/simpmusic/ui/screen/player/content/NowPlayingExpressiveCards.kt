@@ -209,35 +209,42 @@ internal fun ExpressiveArtworkCardPage(
         // is center-cropped by the page clip on mobile; Desktop keeps the plain modifier.
         if (pageHasCanvas) {
             Crossfade(targetState = state.screenData.canvasData?.isVideo) { isVideo ->
+                // Audio-only build: never open a Canvas MP4/HLS stream. Render a cached still
+                // thumbnail so the artwork layer cannot start an extra network video request.
+                val stillImage = state.screenData.canvasData?.thumbUrl
+                    ?: state.screenData.thumbnailURL
                 if (isVideo == true) {
-                    state.screenData.canvasData?.url?.let { url ->
-                        MediaPlayerView(
-                            url = url,
-                            modifier =
-                                Modifier
-                                    .fillMaxHeight()
-                                    .then(
-                                        if (getPlatform() == Platform.Desktop) {
-                                            Modifier
-                                        } else {
-                                            Modifier
-                                                .wrapContentWidth(unbounded = true, align = Alignment.CenterHorizontally)
-                                                .align(Alignment.Center)
-                                        },
-                                    ),
-                        )
-                    }
-                } else if (isVideo == false) {
                     AsyncImage(
                         model =
                             ImageRequest
                                 .Builder(LocalPlatformContext.current)
-                                .data(state.screenData.canvasData?.url)
+                                .data(stillImage)
                                 .diskCachePolicy(CachePolicy.ENABLED)
-                                .diskCacheKey(state.screenData.canvasData?.url)
+                                .diskCacheKey(stillImage)
                                 .crossfade(550)
                                 .build(),
                         contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                } else if (isVideo == false) {
+                    val canvasUrl = state.screenData.canvasData?.url
+                    val imageUrl = if (canvasUrl?.contains(".m3u8", ignoreCase = true) == true) {
+                        state.screenData.thumbnailURL
+                    } else {
+                        canvasUrl ?: state.screenData.thumbnailURL
+                    }
+                    AsyncImage(
+                        model =
+                            ImageRequest
+                                .Builder(LocalPlatformContext.current)
+                                .data(imageUrl)
+                                .diskCachePolicy(CachePolicy.ENABLED)
+                                .diskCacheKey(imageUrl)
+                                .crossfade(550)
+                                .build(),
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize(),
                     )
                 }
