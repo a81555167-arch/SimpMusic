@@ -730,6 +730,10 @@ class SpotifyLibrarySyncService(
                 val response = http.post(GRAPHQL_URL) {
                     header(HttpHeaders.Authorization, "Bearer $token")
                     header(HttpHeaders.Accept, "application/json")
+                    header(HttpHeaders.UserAgent, SPOTIFY_WEB_USER_AGENT)
+                    header("app-platform", "WebPlayer")
+                    header(HttpHeaders.Origin, SPOTIFY_WEB_ORIGIN)
+                    header(HttpHeaders.Referrer, SPOTIFY_WEB_REFERER)
                     contentType(ContentType.Application.Json)
                     setBody(body.toString())
                 }
@@ -793,7 +797,11 @@ class SpotifyLibrarySyncService(
         private const val MAX_AUTOMATIC_RETRY_AFTER_SECONDS = 60L
         private const val KEY_HASH_CACHE = "spotify_sync_hash_registry_json_v1"
         private const val KEY_HASH_FETCH_TIME = "spotify_sync_hash_registry_fetch_ms_v1"
-        private const val GRAPHQL_URL = "https://api-partner.spotify.com/pathfinder/v1/query"
+        private const val GRAPHQL_URL = "https://api-partner.spotify.com/pathfinder/v2/query"
+        private const val SPOTIFY_WEB_ORIGIN = "https://open.spotify.com"
+        private const val SPOTIFY_WEB_REFERER = "https://open.spotify.com/"
+        private const val SPOTIFY_WEB_USER_AGENT =
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36"
         private const val KEY_LIBRARY_CACHE = "spotify_sync_library_json_v1"
         private const val KEY_HOME_CACHE = "spotify_sync_home_json_v1"
         private const val KEY_LIBRARY_SYNC_TIME = "spotify_sync_library_success_ms_v1"
