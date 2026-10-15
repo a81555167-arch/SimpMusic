@@ -96,15 +96,36 @@ class SimpMusicApplication :
 
         // Disable the video renderer at the player level as a final guard. This also prevents
         // HLS live playlists from downloading video segments even when no video surface is visible.
-        runCatching {
-            mainPlayer.trackSelectionParameters =
-                mainPlayer.trackSelectionParameters
-                    .buildUpon()
-                    .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, true)
-                    .build()
-        }.onFailure { error ->
-            Logger.e("AudioOnly", "Could not disable video tracks: ${error.message}")
+        fun enforceAudioOnlyTracks() {
+            runCatching {
+                val parameters = mainPlayer.trackSelectionParameters
+                if (C.TRACK_TYPE_VIDEO !in parameters.disabledTrackTypes) {
+                    mainPlayer.trackSelectionParameters =
+                        parameters.buildUpon()
+                            .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, true)
+                            .build()
+                }
+            }.onFailure { error ->
+                Logger.e("AudioOnly", "Could not disable video tracks: ${error.message}")
+            }
         }
+        enforceAudioOnlyTracks()
+        // SimpMusic's crossfade engine can replace its underlying ExoPlayer between tracks.
+        // Re-apply the invariant when the active item/track set changes, not just at app startup.
+        mainPlayer.addListener(
+            object : Player.Listener {
+                override fun onMediaItemTransition(
+                    mediaItem: androidx.media3.common.MediaItem?,
+                    reason: Int,
+                ) {
+                    enforceAudioOnlyTracks()
+                }
+
+                override fun onTracksChanged(tracks: androidx.media3.common.Tracks) {
+                    enforceAudioOnlyTracks()
+                }
+            },
+        )
 
 
         // provide custom configuration
