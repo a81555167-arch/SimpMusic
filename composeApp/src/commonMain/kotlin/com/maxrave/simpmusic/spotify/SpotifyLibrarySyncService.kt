@@ -595,6 +595,9 @@ class SpotifyLibrarySyncService(
             if (expectedTotal == null && items.size < pageSize) break
             offset += items.size
         }
+        if (expectedTotal != null && output.size < expectedTotal!!) {
+            error("Spotify $operation pagination ended early (${output.size}/$expectedTotal items); keeping the previous local cache.")
+        }
         return output
     }
 
