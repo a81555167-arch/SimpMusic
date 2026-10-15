@@ -200,7 +200,7 @@ fun NowPlayingScreenContent(
     // Apple Music style's quality line under the progress bar — see NowPlayingContentState.toAudioQualityLabel.
     val formatState by sharedViewModel.format.collectAsStateWithLifecycle(initialValue = null)
 
-    val shouldShowVideo by sharedViewModel.getVideo.collectAsStateWithLifecycle()
+    // This build is audio-only: ignore legacy video preferences so old installs cannot re-enable video.
     val translatedVoteState by sharedViewModel.translatedVoteState.collectAsStateWithLifecycle()
     val lyricsVoteState by sharedViewModel.lyricsVoteState.collectAsStateWithLifecycle()
     val isUserLoggedIn by sharedViewModel
@@ -626,7 +626,7 @@ fun NowPlayingScreenContent(
             timelineFlow = sharedViewModel.timeline,
             likeStatus = likeStatus == YouTubeLikeStatus.LIKE,
             castState = castState,
-            shouldShowVideo = shouldShowVideo,
+            shouldShowVideo = false,
             isUserLoggedIn = isUserLoggedIn,
             artworkQueue = artworkQueue,
             currentOrderIndex = currentOrderIndex,
