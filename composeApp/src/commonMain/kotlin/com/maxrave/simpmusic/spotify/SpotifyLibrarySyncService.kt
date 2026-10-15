@@ -447,7 +447,7 @@ class SpotifyLibrarySyncService(
                 val artist = artistElement as? JsonObject ?: return@mapNotNull null
                 (artist["profile"] as? JsonObject)?.text("name") ?: artist.text("name")
             }.map(::normalize)
-            if (expectedArtists.isNotEmpty() && foundArtists.none { found -> expectedArtists.any { expected -> expected == found || expected.contains(found) || found.contains(expected) } }) {
+            if (expectedArtists.isNotEmpty() && foundArtists.none { found -> expectedArtists.any { expected -> expected == found } }) {
                 return@firstNotNullOfOrNull null
             }
             val uri = wrapper.text("_uri") ?: wrapper.text("uri") ?: return@firstNotNullOfOrNull null
