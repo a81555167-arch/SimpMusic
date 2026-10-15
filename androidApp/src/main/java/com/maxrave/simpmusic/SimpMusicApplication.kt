@@ -143,9 +143,9 @@ class SimpMusicApplication :
                 .components {
                     add(
                         NetworkFirstInterceptor(
-                            // Cover art and thumbnails rarely change at a stable URL. A longer TTL
-                            // prevents re-downloading the same images every day on limited plans.
-                            ttlMillis = 7L * 24 * 60 * 60 * 1000,
+                            // Cover art and thumbnails rarely change at a stable URL. Keep them fresh for
+                            // thirty days to avoid repeated mobile-data downloads.
+                            ttlMillis = 30L * 24 * 60 * 60 * 1000,
                             imageLoader = { imageLoader },
                         ),
                     )
