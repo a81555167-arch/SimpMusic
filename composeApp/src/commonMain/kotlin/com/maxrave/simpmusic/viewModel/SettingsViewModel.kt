@@ -1142,16 +1142,16 @@ class SettingsViewModel(
 
     fun getPlayVideoInsteadOfAudio() {
         viewModelScope.launch {
-            dataStoreManager.watchVideoInsteadOfPlayingAudio.collect { playVideoInsteadOfAudio ->
-                _playVideoInsteadOfAudio.emit(playVideoInsteadOfAudio)
-            }
+            dataStoreManager.setWatchVideoInsteadOfPlayingAudio(false)
+            _playVideoInsteadOfAudio.emit(DataStoreManager.Values.FALSE)
         }
     }
 
     fun setPlayVideoInsteadOfAudio(playVideoInsteadOfAudio: Boolean) {
+        // Compatibility shim for older callers: video playback is disabled in this build.
         viewModelScope.launch {
-            dataStoreManager.setWatchVideoInsteadOfPlayingAudio(playVideoInsteadOfAudio)
-            getPlayVideoInsteadOfAudio()
+            dataStoreManager.setWatchVideoInsteadOfPlayingAudio(false)
+            _playVideoInsteadOfAudio.emit(DataStoreManager.Values.FALSE)
         }
     }
 
