@@ -268,6 +268,7 @@ fun HomeScreen(
     val homeData by viewModel.homeItemList.collectAsStateWithLifecycle()
     val spotifyHomeSections by viewModel.spotifyHomeSections.collectAsStateWithLifecycle()
     val spotifyHomeRefreshing by viewModel.spotifyHomeRefreshing.collectAsStateWithLifecycle()
+    val spotifySyncError by viewModel.spotifySyncError.collectAsStateWithLifecycle()
     val newRelease by viewModel.newRelease.collectAsStateWithLifecycle()
     val chart by viewModel.chart.collectAsStateWithLifecycle()
     val moodMomentAndGenre by viewModel.exploreMoodItem.collectAsStateWithLifecycle()
@@ -745,12 +746,13 @@ fun HomeScreen(
                         state = scrollState,
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        if (spotifyHomeSections.isNotEmpty()) {
+                        if (spotifyHomeSections.isNotEmpty() || spotifySyncError != null) {
                             item(key = "spotify-home-shelves") {
                                 SpotifyHomeShelf(
                                     sections = spotifyHomeSections,
                                     isRefreshing = spotifyHomeRefreshing,
                                     onRefresh = { viewModel.refreshSpotifyHome() },
+                                    errorMessage = spotifySyncError,
                                     searchViewModel = spotifySearchViewModel,
                                     navController = navController,
                                     modifier = Modifier.padding(horizontal = 15.dp, vertical = 8.dp),
