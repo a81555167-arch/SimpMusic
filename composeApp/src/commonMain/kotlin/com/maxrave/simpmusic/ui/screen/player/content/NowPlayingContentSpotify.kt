@@ -595,7 +595,7 @@ fun NowPlayingContentSpotify(
                                                             // the shadow above is cast from — so it takes the
                                                             // video frame's shape, or a 16:9 shadow rings a
                                                             // tall video.
-                                                            if (state.screenData.isVideo && state.shouldShowVideo) {
+                                                            if (false) {
                                                                 Modifier.aspectRatio(state.videoAspectRatio)
                                                             } else {
                                                                 Modifier
@@ -606,14 +606,14 @@ fun NowPlayingContentSpotify(
                                                         .clip(
                                                             RoundedCornerShape(8.dp),
                                                         ).alpha(
-                                                            if (!state.screenData.isVideo || !state.shouldShowVideo) 1f else 0f,
+                                                            if (true) 1f else 0f,
                                                         ),
                                             )
                                         }
 
                                         // Inline video player (current page + isVideo + shouldShowVideo).
                                         androidx.compose.animation.AnimatedVisibility(
-                                            visible = state.screenData.isVideo && state.shouldShowVideo,
+                                            visible = false,
                                             modifier = Modifier.align(Alignment.Center),
                                         ) {
                                             var internalShowSubtitle by rememberSaveable {
