@@ -1,6 +1,5 @@
 package com.maxrave.simpmusic.ui.screen.player
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -75,16 +74,7 @@ fun SpotifyAddToPlaylistSheet(
             ) {
                 items(library.playlists, key = { it.id }) { playlist ->
                     Row(
-                        modifier = Modifier.fillMaxWidth().clickable(enabled = addingPlaylistId == null) {
-                            coroutineScope.launch {
-                                addingPlaylistId = playlist.id
-                                message = null
-                                service.addTrackToPlaylistByMetadata(playlist.id, songTitle, artists)
-                                    .onSuccess { message = "Added to " + playlist.name + " on Spotify." }
-                                    .onFailure { message = it.message ?: "Could not add this track to Spotify." }
-                                addingPlaylistId = null
-                            }
-                        }.padding(vertical = 8.dp),
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         AsyncImage(
