@@ -40,12 +40,14 @@ class LogInViewModel(
                     if (it["sp_dc"].isNullOrEmpty()) Logger.w("Auth", "Spotify: sign-in finished without an sp_dc cookie")
                     dataStoreManager.setSpdc(it["sp_dc"] ?: "")
                     _spotifyStatus.value = true
-                    // Seed the local Spotify cache immediately after a successful web login.
-                    // Keep the login result successful even if Spotify's private API is temporarily unavailable.
-                    spotifySyncService.syncHome(forceRefresh = true).onFailure {
+                    // Seed the local cache after login, but re-check the cache under each sync
+                    // mutex rather than forcing a second download if HomeViewModel is already syncing.
+                    // The sync policy permits the one-time initial fetch even in data-saver mode.
+                    val dataSaverEnabled = spotifySyncService.isDataSaverEnabled()
+                    spotifySyncService.syncHome(dataSaverEnabled = dataSaverEnabled).onFailure {
                         Logger.w("SpotifySync", "Initial home sync failed: ${it.message}")
                     }
-                    spotifySyncService.syncLibrary(forceRefresh = true).onFailure {
+                    spotifySyncService.syncLibrary(dataSaverEnabled = dataSaverEnabled).onFailure {
                         Logger.w("SpotifySync", "Initial library sync failed: ${it.message}")
                     }
                 }
