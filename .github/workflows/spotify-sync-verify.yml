@@ -1,9 +1,6 @@
 name: Spotify sync branch verification
 
 on:
-  push:
-    branches:
-      - feature/spotify-full-sync-data-saver
   pull_request:
     branches:
       - dev
