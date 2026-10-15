@@ -441,9 +441,17 @@ fun NowPlayingContentSpotify(
                                             model =
                                                 ImageRequest
                                                     .Builder(LocalPlatformContext.current)
-                                                    .data(state.screenData.canvasData?.url)
+                                                    .data(
+                                                        state.screenData.canvasData?.url
+                                                            ?.takeUnless { it.contains(".m3u8", ignoreCase = true) }
+                                                            ?: state.screenData.thumbnailURL,
+                                                    )
                                                     .diskCachePolicy(CachePolicy.ENABLED)
-                                                    .diskCacheKey(state.screenData.canvasData?.url)
+                                                    .diskCacheKey(
+                                                        state.screenData.canvasData?.url
+                                                            ?.takeUnless { it.contains(".m3u8", ignoreCase = true) }
+                                                            ?: state.screenData.thumbnailURL,
+                                                    )
                                                     .crossfade(550)
                                                     .build(),
                                             contentDescription = null,
