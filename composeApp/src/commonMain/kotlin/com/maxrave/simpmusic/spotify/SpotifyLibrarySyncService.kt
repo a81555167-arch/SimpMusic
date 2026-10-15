@@ -61,6 +61,15 @@ class SpotifyLibrarySyncService(
         dataStoreManager.putString(DATA_SAVER_KEY, enabled.toString())
     }
 
+    suspend fun clearLocalCache() {
+        dataStoreManager.putString(KEY_LIBRARY_CACHE, "")
+        dataStoreManager.putString(KEY_HOME_CACHE, "")
+        dataStoreManager.putString(KEY_LIBRARY_SYNC_TIME, "0")
+        dataStoreManager.putString(KEY_HOME_SYNC_TIME, "0")
+        dataStoreManager.setSpotifyPersonalToken("")
+        dataStoreManager.setSpotifyPersonalTokenExpires(0L)
+    }
+
     suspend fun cachedLibraryJson(): String? = dataStoreManager.getString(KEY_LIBRARY_CACHE).first()
     suspend fun cachedHomeJson(): String? = dataStoreManager.getString(KEY_HOME_CACHE).first()
     suspend fun cachedPlaylistTracksJson(playlistId: String): String? =
