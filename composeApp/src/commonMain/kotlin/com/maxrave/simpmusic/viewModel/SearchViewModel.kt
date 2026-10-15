@@ -104,14 +104,27 @@ class SearchViewModel(
 
     private val _pendingSongSearch = MutableStateFlow<String?>(null)
     val pendingSongSearch: StateFlow<String?> get() = _pendingSongSearch.asStateFlow()
+    private val _pendingAllSearch = MutableStateFlow<String?>(null)
+    val pendingAllSearch: StateFlow<String?> get() = _pendingAllSearch.asStateFlow()
 
     /** Opens the in-app YouTube Music song search for a track originating from Spotify. */
     fun requestSongSearch(query: String) {
+        _pendingAllSearch.value = null
         _pendingSongSearch.value = query.trim().takeIf { it.isNotEmpty() }
+    }
+
+    /** Searches YouTube Music for a Spotify home card without launching Spotify playback. */
+    fun requestAllSearch(query: String) {
+        _pendingSongSearch.value = null
+        _pendingAllSearch.value = query.trim().takeIf { it.isNotEmpty() }
     }
 
     fun consumePendingSongSearch() {
         _pendingSongSearch.value = null
+    }
+
+    fun consumePendingAllSearch() {
+        _pendingAllSearch.value = null
     }
 
     /** Browse categories shown on the empty search screen, the way YouTube Music itself does. */
