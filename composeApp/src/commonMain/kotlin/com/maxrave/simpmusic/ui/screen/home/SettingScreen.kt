@@ -100,7 +100,6 @@ import com.maxrave.common.QUALITY
 import com.maxrave.common.SUPPORTED_LANGUAGE
 import com.maxrave.common.SUPPORTED_LOCATION
 import com.maxrave.common.SponsorBlockType
-import com.maxrave.common.VIDEO_QUALITY
 import com.maxrave.domain.extension.now
 import com.maxrave.domain.data.model.lyrics.RomanizationDictionaryState
 import com.maxrave.domain.data.model.lyrics.RomanizationLanguage
@@ -368,7 +367,6 @@ import simpmusic.composeapp.generated.resources.original_audio
 import simpmusic.composeapp.generated.resources.other_app
 import simpmusic.composeapp.generated.resources.play_explicit_content
 import simpmusic.composeapp.generated.resources.play_explicit_content_description
-import simpmusic.composeapp.generated.resources.play_video_for_video_track_instead_of_audio_only
 import simpmusic.composeapp.generated.resources.playback
 import simpmusic.composeapp.generated.resources.player_cache
 import simpmusic.composeapp.generated.resources.preferred_audio_language
@@ -438,7 +436,6 @@ import simpmusic.composeapp.generated.resources.user_interface
 import simpmusic.composeapp.generated.resources.version
 import simpmusic.composeapp.generated.resources.version_format
 import simpmusic.composeapp.generated.resources.video_download_quality
-import simpmusic.composeapp.generated.resources.video_quality
 import simpmusic.composeapp.generated.resources.warning
 import simpmusic.composeapp.generated.resources.weekly
 import simpmusic.composeapp.generated.resources.what_segments_will_be_skipped
@@ -517,14 +514,11 @@ fun SettingScreen(
     val quality by viewModel.quality.collectAsStateWithLifecycle()
     val downloadQuality by viewModel.downloadQuality.collectAsStateWithLifecycle()
     val autoDownloadLikedSongs by viewModel.autoDownloadLikedSongs.collectAsStateWithLifecycle()
-    val videoDownloadQuality by viewModel.videoDownloadQuality.collectAsStateWithLifecycle()
     val keepYoutubePlaylistOffline by viewModel.keepYouTubePlaylistOffline.collectAsStateWithLifecycle()
     val localTrackingEnabled by viewModel.localTrackingEnabled.collectAsStateWithLifecycle(initialValue = false)
     val blogNotificationEnabled by viewModel.blogNotificationEnabled.collectAsStateWithLifecycle()
     val combineLocalAndYouTubeLiked by viewModel.combineLocalAndYouTubeLiked.collectAsStateWithLifecycle()
-    val playVideo by remember { viewModel.playVideoInsteadOfAudio.map { it == TRUE } }.collectAsStateWithLifecycle(initialValue = false)
     val radioAudioOnly by remember { viewModel.radioAudioOnly.map { it == TRUE } }.collectAsStateWithLifecycle(initialValue = false)
-    val videoQuality by viewModel.videoQuality.collectAsStateWithLifecycle()
     val sendData by remember { viewModel.sendBackToGoogle.map { it == TRUE } }.collectAsStateWithLifecycle(initialValue = false)
     val normalizeVolume by remember { viewModel.normalizeVolume.map { it == TRUE } }.collectAsStateWithLifecycle(initialValue = false)
     val skipSilent by remember { viewModel.skipSilent.map { it == TRUE } }.collectAsStateWithLifecycle(initialValue = false)
