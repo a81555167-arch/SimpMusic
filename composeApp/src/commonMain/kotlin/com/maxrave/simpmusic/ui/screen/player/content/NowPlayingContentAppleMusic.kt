@@ -1129,9 +1129,17 @@ private fun AppleMusicArtworkPage(
                                 model =
                                     ImageRequest
                                         .Builder(LocalPlatformContext.current)
-                                        .data(state.screenData.canvasData?.url)
+                                        .data(
+                                            state.screenData.canvasData?.url
+                                                ?.takeUnless { it.contains(".m3u8", ignoreCase = true) }
+                                                ?: state.screenData.thumbnailURL,
+                                        )
                                         .diskCachePolicy(CachePolicy.ENABLED)
-                                        .diskCacheKey(state.screenData.canvasData?.url)
+                                        .diskCacheKey(
+                                            state.screenData.canvasData?.url
+                                                ?.takeUnless { it.contains(".m3u8", ignoreCase = true) }
+                                                ?: state.screenData.thumbnailURL,
+                                        )
                                         .crossfade(550)
                                         .build(),
                                 contentDescription = null,
@@ -1331,14 +1339,7 @@ private fun BoxScope.AnimatedArtworkFrame(
                     modifier = Modifier.fillMaxSize(),
                 )
             }
-            // The frame already has the clip's own shape, so "crop to bounds" crops nothing; it is
-            // the path that sizes the surface from Media3's own presentation state (see the canvas
-            // note in AppleMusicArtworkPage) and keeps a shutter up until the first frame is ready.
-            MediaPlayerView(
-                url = canvas.url,
-                cropToBounds = true,
-                modifier = Modifier.fillMaxSize(),
-            )
+            // Audio-only build: keep the still image above; never open the animated HLS artwork URL.
             // Nothing can blur the video surface itself, so its band is the still's, blurred: at 32dp
             // it is a wash of the clip's colours, which barely move in the strip under the status bar.
             stillRequest?.let { TopBandBlur(model = it, solidTo = topBandSolid, fadeTo = topBand) }
