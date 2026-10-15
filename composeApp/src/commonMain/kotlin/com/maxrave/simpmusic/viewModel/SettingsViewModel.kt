@@ -2009,35 +2009,29 @@ class SettingsViewModel(
 
     fun getSpotifyCanvas() {
         viewModelScope.launch {
-            dataStoreManager.spotifyCanvas.collect {
-                if (it == DataStoreManager.TRUE) {
-                    _spotifyCanvas.emit(true)
-                } else {
-                    _spotifyCanvas.emit(false)
-                }
-            }
+            dataStoreManager.setSpotifyCanvas(false)
+            dataStoreManager.spotifyCanvas.collect { _spotifyCanvas.emit(false) }
         }
     }
 
-    fun setSpotifyCanvas(loggedIn: Boolean) {
+    fun setSpotifyCanvas(@Suppress("UNUSED_PARAMETER") loggedIn: Boolean) {
         viewModelScope.launch {
-            dataStoreManager.setSpotifyCanvas(loggedIn)
-            getSpotifyCanvas()
+            dataStoreManager.setSpotifyCanvas(false)
+            _spotifyCanvas.emit(false)
         }
     }
 
     fun getAMAnimatedArtwork() {
         viewModelScope.launch {
-            dataStoreManager.amAnimatedArtwork.collect {
-                _amAnimatedArtwork.emit(it == DataStoreManager.TRUE)
-            }
+            dataStoreManager.setAMAnimatedArtwork(false)
+            dataStoreManager.amAnimatedArtwork.collect { _amAnimatedArtwork.emit(false) }
         }
     }
 
-    fun setAMAnimatedArtwork(enabled: Boolean) {
+    fun setAMAnimatedArtwork(@Suppress("UNUSED_PARAMETER") enabled: Boolean) {
         viewModelScope.launch {
-            dataStoreManager.setAMAnimatedArtwork(enabled)
-            getAMAnimatedArtwork()
+            dataStoreManager.setAMAnimatedArtwork(false)
+            _amAnimatedArtwork.emit(false)
         }
     }
 
