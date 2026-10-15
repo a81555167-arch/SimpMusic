@@ -5,6 +5,8 @@ import android.app.Application
 import android.database.CursorWindow
 import android.os.Build
 import android.util.Log
+import androidx.media3.common.C
+import androidx.media3.common.Player
 import androidx.work.Configuration
 import androidx.work.WorkManager
 import cat.ereza.customactivityoncrash.config.CaocConfig
@@ -16,6 +18,7 @@ import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import coil3.request.CachePolicy
 import coil3.request.crossfade
 import com.maxrave.common.AppIdentity
+import com.maxrave.common.Config.MAIN_PLAYER
 import com.maxrave.data.di.loader.loadAllModules
 import com.maxrave.domain.manager.DataStoreManager
 import com.maxrave.logger.Logger
@@ -37,6 +40,7 @@ import org.koin.android.ext.koin.androidContext
 import org.koin.android.ext.koin.androidLogger
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
+import org.koin.core.qualifier.named
 import org.koin.core.context.loadKoinModules
 import org.koin.core.context.startKoin
 import org.koin.core.logger.Level
@@ -52,6 +56,7 @@ class SimpMusicApplication :
 
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val dataStoreManager: DataStoreManager by inject()
+    private val mainPlayer: Player by inject(named(MAIN_PLAYER))
     private lateinit var autoBackupScheduler: AutoBackupScheduler
 
     override fun onCreate() {
@@ -73,6 +78,18 @@ class SimpMusicApplication :
             )
             loadKoinModules(viewModelModule)
         }
+        // Disable the video renderer at the player level as a final guard. This also prevents
+        // HLS live playlists from downloading video segments even when no video surface is visible.
+        runCatching {
+            mainPlayer.trackSelectionParameters =
+                mainPlayer.trackSelectionParameters
+                    .buildUpon()
+                    .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, true)
+                    .build()
+        }.onFailure { error ->
+            Logger.e("AudioOnly", "Could not disable video tracks: ${error.message}")
+        }
+
         // Audio-only build invariant: reset any legacy preference before the media service can
         // restore a queue in the background. This is intentionally synchronous and tiny.
         runBlocking {
