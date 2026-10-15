@@ -3,6 +3,7 @@ package com.maxrave.simpmusic.viewModel
 import androidx.lifecycle.viewModelScope
 import com.maxrave.domain.manager.DataStoreManager
 import com.maxrave.logger.Logger
+import com.maxrave.simpmusic.spotify.SpotifyLibrarySyncService
 import com.maxrave.simpmusic.viewModel.base.BaseViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -16,6 +17,7 @@ import org.simpmusic.lastfm.completeLogin
 
 class LogInViewModel(
     private val dataStoreManager: DataStoreManager,
+    private val spotifySyncService: SpotifyLibrarySyncService,
 ) : BaseViewModel() {
     private val _spotifyStatus: MutableStateFlow<Boolean> = MutableStateFlow(false)
     val spotifyStatus: StateFlow<Boolean> get() = _spotifyStatus
@@ -38,6 +40,14 @@ class LogInViewModel(
                     if (it["sp_dc"].isNullOrEmpty()) Logger.w("Auth", "Spotify: sign-in finished without an sp_dc cookie")
                     dataStoreManager.setSpdc(it["sp_dc"] ?: "")
                     _spotifyStatus.value = true
+                    // Seed the local Spotify cache immediately after a successful web login.
+                    // Keep the login result successful even if Spotify's private API is temporarily unavailable.
+                    spotifySyncService.syncHome(forceRefresh = true).onFailure {
+                        Logger.w("SpotifySync", "Initial home sync failed: ${it.message}")
+                    }
+                    spotifySyncService.syncLibrary(forceRefresh = true).onFailure {
+                        Logger.w("SpotifySync", "Initial library sync failed: ${it.message}")
+                    }
                 }
         }
     }
