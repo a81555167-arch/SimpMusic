@@ -1049,7 +1049,6 @@ fun SettingScreen(
                     title = stringResource(Res.string.quality),
                     subtitle = quality ?: "",
                     smallSubtitle = true,
-                    isEnable = !spotifyDataSaverEnabled,
                     onClick = {
                         viewModel.setAlertData(
                             SettingAlertState(
