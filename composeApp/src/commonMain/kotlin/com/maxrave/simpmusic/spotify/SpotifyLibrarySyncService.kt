@@ -13,6 +13,8 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.contentType
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -74,6 +76,10 @@ class SpotifyLibrarySyncService(
 ) {
     private val spotify = Spotify()
     private val http = HttpClient(CIO)
+    private val libraryMutex = Mutex()
+    private val homeMutex = Mutex()
+    private val playlistMutex = Mutex()
+    private val tokenMutex = Mutex()
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
 
     suspend fun isLoggedIn(): Boolean = dataStoreManager.spdc.first().isNotBlank()
@@ -254,7 +260,8 @@ class SpotifyLibrarySyncService(
     suspend fun syncLibrary(
         dataSaverEnabled: Boolean = false,
         forceRefresh: Boolean = false,
-    ): Result<String> = runCatching {
+    ): Result<String> = libraryMutex.withLock {
+        runCatching {
         val now = Clock.System.now().toEpochMilliseconds()
         val last = dataStoreManager.getString(KEY_LIBRARY_SYNC_TIME).first()?.toLongOrNull()
         if (!SpotifySyncPolicy.shouldRefresh(last, now, SpotifySyncPolicy.DEFAULT_LIBRARY_REFRESH_INTERVAL_MS, dataSaverEnabled, forceRefresh)) {
@@ -273,12 +280,14 @@ class SpotifyLibrarySyncService(
         dataStoreManager.putString(KEY_LIBRARY_CACHE, snapshot)
         dataStoreManager.putString(KEY_LIBRARY_SYNC_TIME, now.toString())
         snapshot
+        }
     }
 
     suspend fun syncHome(
         dataSaverEnabled: Boolean = false,
         forceRefresh: Boolean = false,
-    ): Result<String> = runCatching {
+    ): Result<String> = homeMutex.withLock {
+        runCatching {
         val now = Clock.System.now().toEpochMilliseconds()
         val last = dataStoreManager.getString(KEY_HOME_SYNC_TIME).first()?.toLongOrNull()
         if (!SpotifySyncPolicy.shouldRefresh(last, now, SpotifySyncPolicy.DEFAULT_HOME_REFRESH_INTERVAL_MS, dataSaverEnabled, forceRefresh)) {
@@ -303,13 +312,15 @@ class SpotifyLibrarySyncService(
         dataStoreManager.putString(KEY_HOME_CACHE, snapshot)
         dataStoreManager.putString(KEY_HOME_SYNC_TIME, now.toString())
         snapshot
+        }
     }
 
     suspend fun syncPlaylistTracks(
         playlistId: String,
         dataSaverEnabled: Boolean = false,
         forceRefresh: Boolean = false,
-    ): Result<String> = runCatching {
+    ): Result<String> = playlistMutex.withLock {
+        runCatching {
         require(playlistId.isNotBlank()) { "Playlist ID cannot be blank" }
         val cacheKey = "$KEY_PLAYLIST_CACHE_PREFIX$playlistId"
         val timeKey = "$KEY_PLAYLIST_TIME_PREFIX$playlistId"
@@ -336,6 +347,7 @@ class SpotifyLibrarySyncService(
         dataStoreManager.putString(cacheKey, snapshot)
         dataStoreManager.putString(timeKey, now.toString())
         snapshot
+        }
     }
 
     suspend fun setLiked(
@@ -476,7 +488,7 @@ class SpotifyLibrarySyncService(
         Unit
     }
 
-    private suspend fun accessToken(): String {
+    private suspend fun accessToken(): String = tokenMutex.withLock {
         val spdc = dataStoreManager.spdc.first()
         require(spdc.isNotBlank()) { "Log in to Spotify before syncing your library." }
         val current = dataStoreManager.spotifyPersonalToken.first()
@@ -490,7 +502,7 @@ class SpotifyLibrarySyncService(
         }
         dataStoreManager.setSpotifyPersonalToken(token.accessToken)
         dataStoreManager.setSpotifyPersonalTokenExpires(token.accessTokenExpirationTimestampMs)
-        return token.accessToken
+        token.accessToken
     }
 
     private suspend fun fetchAllPages(
