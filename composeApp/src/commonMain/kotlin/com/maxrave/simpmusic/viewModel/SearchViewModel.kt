@@ -102,6 +102,18 @@ class SearchViewModel(
     private val _searchHistory: MutableStateFlow<List<String>> = MutableStateFlow(emptyList())
     val searchHistory: StateFlow<List<String>> get() = _searchHistory.asStateFlow()
 
+    private val _pendingSongSearch = MutableStateFlow<String?>(null)
+    val pendingSongSearch: StateFlow<String?> get() = _pendingSongSearch.asStateFlow()
+
+    /** Opens the in-app YouTube Music song search for a track originating from Spotify. */
+    fun requestSongSearch(query: String) {
+        _pendingSongSearch.value = query.trim().takeIf { it.isNotEmpty() }
+    }
+
+    fun consumePendingSongSearch() {
+        _pendingSongSearch.value = null
+    }
+
     /** Browse categories shown on the empty search screen, the way YouTube Music itself does. */
     private val _moodAndGenres: MutableStateFlow<Mood?> = MutableStateFlow(null)
     val moodAndGenres: StateFlow<Mood?> get() = _moodAndGenres.asStateFlow()
